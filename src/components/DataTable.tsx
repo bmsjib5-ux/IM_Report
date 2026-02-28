@@ -20,6 +20,7 @@ const COLUMN_DEFS: ColumnDef[] = [
   { key: 'notes', label: 'หมายเหตุ', defaultWidth: 160, minWidth: 80 },
   { key: 'reporter', label: 'ผู้แจ้ง', defaultWidth: 100, minWidth: 50 },
   { key: 'responsible', label: 'ผู้ดูแล', defaultWidth: 75, minWidth: 50 },
+  { key: 'editDate', label: 'วันที่แก้ไข', defaultWidth: 90, minWidth: 60 },
 ];
 
 const DEFAULT_ORDER = COLUMN_DEFS.map(c => c.key);
@@ -82,6 +83,7 @@ function renderCell(issue: Issue, key: keyof Issue) {
         </div>
       );
     case 'date':
+    case 'editDate':
       return <span className="text-gray-700 whitespace-nowrap">{value}</span>;
     default:
       return (
@@ -295,6 +297,7 @@ export default function DataTable({
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400 mt-1">
           {issue.reporter && <span>แจ้ง: {issue.reporter}</span>}
           {issue.responsible && <span>ดูแล: {issue.responsible}</span>}
+          {issue.editDate && <span>แก้ไข: {issue.editDate}</span>}
         </div>
         {issue.notes && (
           <p className="text-xs text-gray-400 mt-2 line-clamp-1 italic">{issue.notes}</p>

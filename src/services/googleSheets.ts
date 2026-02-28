@@ -160,6 +160,7 @@ export async function updateIssue(issue: Issue): Promise<boolean> {
         notes: issue.notes,
         reporter: issue.reporter,
         responsible: issue.responsible,
+        editDate: issue.editDate,
       },
     }),
   });
@@ -190,6 +191,7 @@ export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean>
         notes: issue.notes,
         reporter: issue.reporter,
         responsible: issue.responsible,
+        editDate: issue.editDate,
       },
     }),
   });

@@ -31,6 +31,7 @@ export function parseCSV(csvText: string): Issue[] {
       notes: cols[6]?.trim() || '',
       reporter: cols[7]?.trim() || '',
       responsible: cols[8]?.trim() || '',
+      editDate: cols[9]?.trim() || '',
     });
   }
 

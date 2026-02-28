@@ -24,6 +24,7 @@ export default function AddModal({ nextNo, onClose, onSave, saving }: AddModalPr
     notes: '',
     reporter: '',
     responsible: '',
+    editDate: '',
   });
 
   const handleChange = (field: string, value: string) => {

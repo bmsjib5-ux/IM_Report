@@ -9,6 +9,7 @@ export interface Issue {
   notes: string;
   reporter: string;
   responsible: string;
+  editDate: string;
 }
 
 export type IssueStatus = 'ดำเนินการแล้ว' | 'รอดำเนินการ' | 'กำลังดำเนินการ' | 'ไม่สามารถทำได้' | '';

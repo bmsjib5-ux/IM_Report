@@ -185,15 +185,16 @@ function validateRowIndex(rowIndex, sheet) {
 
 function buildRowValues(data) {
   return [
-    sanitizeString(data.no),
-    sanitizeString(data.department),
-    sanitizeString(data.date),
-    sanitizeString(data.description),
-    sanitizeString(data.category),
-    sanitizeString(data.status),
-    sanitizeString(data.notes),
-    sanitizeString(data.reporter),
-    sanitizeString(data.responsible)
+    sanitizeString(data.no),           // Column A
+    sanitizeString(data.department),   // Column B
+    sanitizeString(data.date),         // Column C
+    sanitizeString(data.description),  // Column D
+    sanitizeString(data.category),     // Column E
+    sanitizeString(data.status),       // Column F
+    sanitizeString(data.notes),        // Column G
+    sanitizeString(data.reporter),     // Column H
+    sanitizeString(data.responsible),  // Column I
+    sanitizeString(data.editDate)      // Column J - วันที่แก้ไข
   ];
 }
 
@@ -273,7 +274,7 @@ function updateRow(rowIndex, data, gid) {
   }
 
   // 4. ตรวจสอบว่า row นั้นมีข้อมูลอยู่จริง
-  var existingRow = sheet.getRange(rowCheck.index, 1, 1, 9).getValues()[0];
+  var existingRow = sheet.getRange(rowCheck.index, 1, 1, 10).getValues()[0];
   var isEmpty = existingRow.every(function(cell) {
     return cell === '' || cell === null || cell === undefined;
   });

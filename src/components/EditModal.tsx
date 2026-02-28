@@ -18,7 +18,11 @@ export default function EditModal({ issue, onClose, onSave, saving }: EditModalP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSave(form);
+    // Auto-set วันที่แก้ไข เป็นวันนี้ (พ.ศ.)
+    const today = new Date();
+    const thaiYear = today.getFullYear() + 543;
+    const editDateStr = `${today.getDate()}/${today.getMonth() + 1}/${thaiYear}`;
+    await onSave({ ...form, editDate: editDateStr });
   };
 
   const inputClass = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none hover:border-gray-300 transition-colors";
@@ -104,6 +108,13 @@ export default function EditModal({ issue, onClose, onSave, saving }: EditModalP
               <input type="text" value={form.responsible} onChange={e => handleChange('responsible', e.target.value)} className={inputClass} />
             </div>
           </div>
+
+          {form.editDate && (
+            <div>
+              <label className={labelClass}>วันที่แก้ไขล่าสุด</label>
+              <input type="text" value={form.editDate} readOnly className={`${inputClass} bg-gray-50 text-gray-500`} />
+            </div>
+          )}
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-5 border-t border-gray-100">
             <button
