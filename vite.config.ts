@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// GITHUB_PAGES=true → base="/IM_Report/" สำหรับ deploy web
+// ปกติ (Electron) → base="./"
+const isGitHubPages = process.env.GITHUB_PAGES === 'true';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -26,5 +30,5 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/IM_Report/',
+  base: isGitHubPages ? '/IM_Report/' : './',
 })

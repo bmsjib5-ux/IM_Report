@@ -48,7 +48,8 @@ async function main() {
   });
 
   console.log('\n=== Build complete! ===');
-  console.log('Installer:', path.join(releaseDir, 'IM Report Dashboard Setup 1.0.0.exe'));
+  const pkg = require(path.join(ROOT, 'package.json'));
+  console.log('Installer:', path.join(releaseDir, 'IM Report Dashboard Setup ' + pkg.version + '.exe'));
 }
 
 main().catch(err => {

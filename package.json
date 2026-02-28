@@ -1,7 +1,7 @@
 {
   "name": "im-report-dashboard",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -12,7 +12,7 @@
     "electron:dev": "vite & sleep 2 && electron .",
     "electron:build": "tsc -b && vite build && electron-builder --win",
     "dist": "node scripts/build-win.cjs",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "cross-env GITHUB_PAGES=true npm run build && gh-pages -d dist"
   },
   "build": {
     "appId": "com.bms.im-report-dashboard",
@@ -60,6 +60,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "cross-env": "^10.1.0",
     "electron": "^40.6.1",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.1",

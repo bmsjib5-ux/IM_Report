@@ -148,6 +148,7 @@ export async function updateIssue(issue: Issue): Promise<boolean> {
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({
       action: 'update',
+      gid: sheet.gid,
       rowIndex: issue.rowIndex,
       data: {
         no: issue.no,
@@ -178,6 +179,7 @@ export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean>
     headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({
       action: 'add',
+      gid: sheet.gid,
       data: {
         no: issue.no,
         department: issue.department,
