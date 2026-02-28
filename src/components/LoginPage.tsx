@@ -112,7 +112,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          IM Report Dashboard v1.1
+          IM Report Dashboard v1.2
         </p>
       </div>
     </div>

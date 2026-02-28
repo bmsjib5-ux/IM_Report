@@ -96,15 +96,18 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     }
   }, []);
 
+  // กรองเฉพาะรายการที่มีรายละเอียดปัญหา (ไม่นับแถวว่าง)
+  const validIssues = useMemo(() => issues.filter(i => i.description.trim() !== ''), [issues]);
+
   // Get unique departments
   const departments = useMemo(() => {
-    const depts = new Set(issues.map(i => i.department).filter(Boolean));
+    const depts = new Set(validIssues.map(i => i.department).filter(Boolean));
     return Array.from(depts).sort();
-  }, [issues]);
+  }, [validIssues]);
 
   // Filter and sort
   const filteredIssues = useMemo(() => {
-    let result = issues;
+    let result = validIssues;
 
     if (searchText) {
       const search = searchText.toLowerCase();
@@ -160,7 +163,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     }
 
     return result;
-  }, [issues, searchText, statusFilter, categoryFilter, departmentFilter, dateFrom, dateTo, sortConfig]);
+  }, [validIssues, searchText, statusFilter, categoryFilter, departmentFilter, dateFrom, dateTo, sortConfig]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -503,7 +506,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         )}
 
         {/* Summary Cards */}
-        <SummaryCards issues={issues} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
+        <SummaryCards issues={validIssues} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
 
         {/* Filter Bar */}
         <FilterBar
