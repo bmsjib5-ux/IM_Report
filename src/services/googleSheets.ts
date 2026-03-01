@@ -1,5 +1,5 @@
-import type { Issue, AppSettings, SheetLink, Hospital } from '../types';
-import { parseCSV, extractSheetInfo } from '../utils/csvParser';
+import type { Issue, AppSettings, SheetLink, Hospital, GenericSheetData } from '../types';
+import { parseCSV, parseCSVGeneric, extractSheetInfo } from '../utils/csvParser';
 import { generateId } from '../types';
 import { getSupabaseConfig, loadSettingsFromSupabase, saveSettingsToSupabase } from './supabase';
 
@@ -15,6 +15,35 @@ const DEFAULT_HOSPITAL: Hospital = {
       sheetId: '195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc',
       gid: '1358042378',
       appsScriptUrl: '',
+      sheetType: 'issue',
+    },
+    {
+      id: 'default-form-sheet',
+      name: 'แบบฟอร์ม',
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc/edit?gid=1527828255#gid=1527828255',
+      sheetId: '195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc',
+      gid: '1527828255',
+      appsScriptUrl: '',
+      headerRow: 3,
+      sheetType: 'form',
+    },
+    {
+      id: 'default-assessment-sheet',
+      name: 'Assessment',
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc/edit?gid=1520366934#gid=1520366934',
+      sheetId: '195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc',
+      gid: '1520366934',
+      appsScriptUrl: '',
+      sheetType: 'assessment',
+    },
+    {
+      id: 'default-report-sheet',
+      name: 'รายงาน',
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc/edit?gid=1231154918#gid=1231154918',
+      sheetId: '195Nh3RV1uPriNAfpgmBsHHcSrqcwQ5fX3V-5FoVlkCc',
+      gid: '1231154918',
+      appsScriptUrl: '',
+      sheetType: 'report',
     },
   ],
 };
@@ -24,6 +53,20 @@ const DEFAULT_SETTINGS: AppSettings = {
   activeHospitalId: 'default',
   activeSheetId: 'default-sheet',
 };
+
+// Merge default sheets ที่ยังไม่มีเข้าไปใน default hospital
+function mergeDefaultSheets(settings: AppSettings): AppSettings {
+  const defaultHospital = settings.hospitals.find(h => h.id === 'default');
+  if (defaultHospital) {
+    const existingIds = new Set(defaultHospital.sheets.map(s => s.id));
+    for (const sheet of DEFAULT_HOSPITAL.sheets) {
+      if (!existingIds.has(sheet.id)) {
+        defaultHospital.sheets.push(sheet);
+      }
+    }
+  }
+  return settings;
+}
 
 export function getSettings(): AppSettings {
   const saved = localStorage.getItem('im-dashboard-settings');
@@ -55,7 +98,7 @@ export function getSettings(): AppSettings {
       saveSettings(migrated);
       return migrated;
     }
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return mergeDefaultSheets({ ...DEFAULT_SETTINGS, ...parsed });
   }
   return DEFAULT_SETTINGS;
 }
@@ -79,8 +122,9 @@ export async function syncSettingsFromSupabase(): Promise<AppSettings> {
   try {
     const remote = await loadSettingsFromSupabase(config);
     if (remote) {
-      localStorage.setItem('im-dashboard-settings', JSON.stringify(remote));
-      return remote;
+      const merged = mergeDefaultSheets(remote);
+      localStorage.setItem('im-dashboard-settings', JSON.stringify(merged));
+      return merged;
     }
   } catch {
     // Supabase offline or error — fall through to localStorage
@@ -135,6 +179,24 @@ export async function fetchIssues(sheet?: SheetLink): Promise<Issue[]> {
 
   const csvText = await response.text();
   return parseCSV(csvText);
+}
+
+export async function fetchGenericSheet(sheet?: SheetLink): Promise<GenericSheetData> {
+  const target = sheet || getActiveSheet(getSettings());
+  if (!target) {
+    throw new Error('ไม่พบ Sheet ที่เลือก กรุณาตั้งค่าก่อน');
+  }
+
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}`;
+
+  const response = await fetch(csvUrl);
+  if (!response.ok) {
+    throw new Error(`ไม่สามารถดึงข้อมูลได้: ${response.status} ${response.statusText}`);
+  }
+
+  const csvText = await response.text();
+  const headerRow = target.headerRow || 1;
+  return parseCSVGeneric(csvText, headerRow);
 }
 
 export async function updateIssue(issue: Issue): Promise<boolean> {

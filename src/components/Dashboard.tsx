@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Issue, SortConfig, AppSettings } from '../types';
-import { fetchIssues, updateIssue, addIssue, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
+import type { Issue, SortConfig, AppSettings, GenericSheetData } from '../types';
+import { SHEET_TYPE_CONFIG } from '../types';
+import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
 import { isSupabaseConfigured } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
@@ -8,9 +9,11 @@ import { parseThaiDate } from '../utils/csvParser';
 import SummaryCards from './SummaryCards';
 import FilterBar from './FilterBar';
 import DataTable from './DataTable';
+import GenericDataTable from './GenericDataTable';
 import EditModal from './EditModal';
 import AddModal from './AddModal';
 import SettingsModal from './SettingsModal';
+import Sidebar from './Sidebar';
 
 interface DashboardProps {
   user?: UserSession;
@@ -20,6 +23,7 @@ interface DashboardProps {
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const canAdmin = isAdmin(user ?? null);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [genericData, setGenericData] = useState<GenericSheetData>({ headers: [], rows: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -45,6 +49,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getSettings());
 
+  // Sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   // Supabase connection
   const [supabaseConnected, setSupabaseConnected] = useState(isSupabaseConfigured());
 
@@ -56,6 +63,8 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);
+  const sheetType = activeSheet?.sheetType || 'issue';
+  const isGenericSheet = sheetType !== 'issue';
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -66,8 +75,23 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchIssues();
-      setIssues(data);
+      const currentSettings = getSettings();
+      const sheet = getActiveSheet(currentSettings);
+      const isGeneric = (sheet?.sheetType || 'issue') !== 'issue';
+      if (isGeneric) {
+        // ใช้ headerRow จาก SHEET_TYPE_CONFIG (override ค่าจาก sheet settings)
+        const typeConfig = SHEET_TYPE_CONFIG[sheet!.sheetType as keyof typeof SHEET_TYPE_CONFIG];
+        const sheetOverride = typeConfig?.headerRow !== undefined
+          ? { ...sheet!, headerRow: typeConfig.headerRow }
+          : sheet;
+        const data = await fetchGenericSheet(sheetOverride);
+        setGenericData(data);
+        setIssues([]);
+      } else {
+        const data = await fetchIssues(sheet);
+        setIssues(data);
+        setGenericData({ headers: [], rows: [] });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
     } finally {
@@ -241,7 +265,39 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   }, [issues]);
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen">
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block shrink-0">
+        <div className="sticky top-0 h-screen">
+          <Sidebar
+            hospitals={settings.hospitals}
+            activeHospitalId={settings.activeHospitalId}
+            activeSheetId={settings.activeSheetId}
+            onHospitalChange={handleHospitalChange}
+            onSheetChange={handleSheetChange}
+          />
+        </div>
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-40" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSidebarOpen(false)} />
+          <div className="relative h-full w-52" style={{ animation: 'slideRight 0.2s ease-out' }}>
+            <Sidebar
+              hospitals={settings.hospitals}
+              activeHospitalId={settings.activeHospitalId}
+              activeSheetId={settings.activeSheetId}
+              onHospitalChange={handleHospitalChange}
+              onSheetChange={(id) => { handleSheetChange(id); setSidebarOpen(false); }}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Main Column */}
+      <div className="flex-1 flex flex-col min-w-0">
       {/* Header */}
       <header className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 shadow-lg shadow-indigo-500/20">
         <div className="max-w-full mx-auto px-4 py-3">
@@ -334,13 +390,13 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               )}
             </div>
 
-            {/* Hamburger - mobile only */}
+            {/* Hamburger - mobile only (opens sidebar) */}
             <button
-              onClick={() => setMobileMenuOpen(prev => !prev)}
+              onClick={() => setSidebarOpen(prev => !prev)}
               className="lg:hidden p-2 text-white/80 hover:text-white hover:bg-white/15 rounded-lg transition-colors"
               aria-label="เมนู"
             >
-              {mobileMenuOpen ? (
+              {sidebarOpen ? (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -430,7 +486,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-full mx-auto px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+      <main className="w-full px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4" style={{ animation: 'fadeIn 0.4s ease-out' }}>
         {/* Error Banner */}
         {error && (
           <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/60 rounded-xl p-3.5 flex items-center gap-3 shadow-sm">
@@ -505,50 +561,80 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         )}
 
-        {/* Summary Cards */}
-        <SummaryCards issues={validIssues} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
-
-        {/* Filter Bar */}
-        <FilterBar
-          searchText={searchText}
-          onSearchChange={setSearchText}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          categoryFilter={categoryFilter}
-          onCategoryFilterChange={setCategoryFilter}
-          departmentFilter={departmentFilter}
-          onDepartmentFilterChange={setDepartmentFilter}
-          departments={departments}
-          dateFrom={dateFrom}
-          onDateFromChange={setDateFrom}
-          dateTo={dateTo}
-          onDateToChange={setDateTo}
-          onAddClick={() => setShowAddModal(true)}
-          onRefresh={loadData}
-          loading={loading}
-        />
-
-        {/* Loading State */}
-        {loading && issues.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 p-16 text-center">
-            <div className="relative mx-auto w-12 h-12 mb-4">
-              <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
-              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin"></div>
+        {isGenericSheet ? (
+          /* Generic Sheet View */
+          <>
+            {/* Refresh button for generic view */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadData}
+                disabled={loading}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white/80 border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50"
+              >
+                <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                รีเฟรช
+              </button>
             </div>
-            <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
-          </div>
+            <GenericDataTable
+              data={genericData}
+              loading={loading && genericData.rows.length === 0}
+              columns={SHEET_TYPE_CONFIG[sheetType]?.columns}
+              statusField={SHEET_TYPE_CONFIG[sheetType]?.statusField}
+              requiredField={SHEET_TYPE_CONFIG[sheetType]?.requiredField}
+            />
+          </>
         ) : (
-          <DataTable
-            issues={filteredIssues}
-            sortConfig={sortConfig}
-            onSort={handleSort}
-            onRowClick={setEditingIssue}
-            currentPage={currentPage}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-          />
+          /* Issue Sheet View */
+          <>
+            {/* Summary Cards */}
+            <SummaryCards issues={validIssues} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
+
+            {/* Filter Bar */}
+            <FilterBar
+              searchText={searchText}
+              onSearchChange={setSearchText}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              categoryFilter={categoryFilter}
+              onCategoryFilterChange={setCategoryFilter}
+              departmentFilter={departmentFilter}
+              onDepartmentFilterChange={setDepartmentFilter}
+              departments={departments}
+              dateFrom={dateFrom}
+              onDateFromChange={setDateFrom}
+              dateTo={dateTo}
+              onDateToChange={setDateTo}
+              onAddClick={() => setShowAddModal(true)}
+              onRefresh={loadData}
+              loading={loading}
+            />
+
+            {/* Loading State */}
+            {loading && issues.length === 0 ? (
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 p-16 text-center">
+                <div className="relative mx-auto w-12 h-12 mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-indigo-100"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin"></div>
+                </div>
+                <p className="text-gray-500 font-medium">กำลังโหลดข้อมูล...</p>
+              </div>
+            ) : (
+              <DataTable
+                issues={filteredIssues}
+                sortConfig={sortConfig}
+                onSort={handleSort}
+                onRowClick={setEditingIssue}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+              />
+            )}
+          </>
         )}
       </main>
+      </div>{/* End Main Column */}
 
       {/* Modals */}
       {editingIssue && (

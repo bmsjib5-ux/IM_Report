@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { AppSettings, Hospital, SheetLink } from '../types';
-import { generateId } from '../types';
+import type { AppSettings, Hospital, SheetLink, SheetType } from '../types';
+import { generateId, SHEET_TYPE_OPTIONS } from '../types';
 import { extractSheetInfo } from '../utils/csvParser';
 import { getSupabaseConfig, saveSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, saveSettingsToSupabase, loadSettingsFromSupabase } from '../services/supabase';
 import type { ConnectionResult } from '../services/supabase';
@@ -32,6 +32,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
   const [newSheetName, setNewSheetName] = useState('');
   const [newSheetUrl, setNewSheetUrl] = useState('');
   const [newSheetScript, setNewSheetScript] = useState('');
+  const [newSheetType, setNewSheetType] = useState<SheetType>('issue');
+  const [newSheetHeaderRow, setNewSheetHeaderRow] = useState('1');
   const [sheetUrlError, setSheetUrlError] = useState('');
 
   // Edit sheet
@@ -39,6 +41,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
   const [editSheetName, setEditSheetName] = useState('');
   const [editSheetUrl, setEditSheetUrl] = useState('');
   const [editSheetScript, setEditSheetScript] = useState('');
+  const [editSheetType, setEditSheetType] = useState<SheetType>('issue');
+  const [editSheetHeaderRow, setEditSheetHeaderRow] = useState('1');
   const [editUrlError, setEditUrlError] = useState('');
   const [newScriptUrlError, setNewScriptUrlError] = useState('');
   const [editScriptError, setEditScriptError] = useState('');
@@ -252,6 +256,7 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     const info = extractSheetInfo(newSheetUrl);
     if (!info) return;
 
+    const headerRowNum = parseInt(newSheetHeaderRow, 10);
     const sheet: SheetLink = {
       id: generateId(),
       name: newSheetName.trim(),
@@ -259,6 +264,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
       sheetId: info.sheetId,
       gid: info.gid,
       appsScriptUrl: newSheetScript.trim(),
+      sheetType: newSheetType,
+      headerRow: headerRowNum > 1 ? headerRowNum : undefined,
     };
 
     setForm(prev => ({
@@ -271,6 +278,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     setNewSheetName('');
     setNewSheetUrl('');
     setNewSheetScript('');
+    setNewSheetType('issue');
+    setNewSheetHeaderRow('1');
     setSheetUrlError('');
     setNewScriptUrlError('');
   };
@@ -290,6 +299,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     setEditSheetName(sheet.name);
     setEditSheetUrl(sheet.sheetUrl);
     setEditSheetScript(sheet.appsScriptUrl);
+    setEditSheetType(sheet.sheetType || 'issue');
+    setEditSheetHeaderRow(String(sheet.headerRow || 1));
     setEditUrlError('');
     setEditScriptError('');
   };
@@ -301,6 +312,7 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
       setEditUrlError('URL ไม่ถูกต้อง');
       return;
     }
+    const headerRowNum = parseInt(editSheetHeaderRow, 10);
 
     setForm(prev => ({
       ...prev,
@@ -317,6 +329,8 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
                       sheetId: info.sheetId,
                       gid: info.gid,
                       appsScriptUrl: editSheetScript.trim(),
+                      sheetType: editSheetType,
+                      headerRow: headerRowNum > 1 ? headerRowNum : undefined,
                     }
                   : s
               ),
@@ -937,6 +951,30 @@ CREATE POLICY "Allow anonymous update"
                                     className={`w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 ${editScriptError ? 'border-red-300' : 'border-gray-300'}`}
                                   />
                                   {editScriptError && <p className="text-xs text-red-500">{editScriptError}</p>}
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">ประเภท Sheet</label>
+                                      <select
+                                        value={editSheetType}
+                                        onChange={e => setEditSheetType(e.target.value as SheetType)}
+                                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                      >
+                                        {SHEET_TYPE_OPTIONS.map(opt => (
+                                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-500 mb-0.5">แถว Header (ปกติ=1)</label>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={editSheetHeaderRow}
+                                        onChange={e => setEditSheetHeaderRow(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                      />
+                                    </div>
+                                  </div>
                                   <div className="flex gap-2">
                                     <button
                                       onClick={handleSaveEditSheet}
@@ -955,8 +993,11 @@ CREATE POLICY "Allow anonymous update"
                               ) : (
                                 <>
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-medium text-gray-800">{sheet.name}</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded font-medium">
+                                        {SHEET_TYPE_OPTIONS.find(o => o.value === (sheet.sheetType || 'issue'))?.label || 'ปัญหา'}
+                                      </span>
                                       {sheet.appsScriptUrl && (
                                         <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">R/W</span>
                                       )}
@@ -1031,6 +1072,30 @@ CREATE POLICY "Allow anonymous update"
                               className={`w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 ${newScriptUrlError ? 'border-red-300' : 'border-gray-300'}`}
                             />
                             {newScriptUrlError && <p className="text-xs text-red-500">{newScriptUrlError}</p>}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">ประเภท Sheet</label>
+                                <select
+                                  value={newSheetType}
+                                  onChange={e => setNewSheetType(e.target.value as SheetType)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                  {SHEET_TYPE_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-medium text-gray-500 mb-0.5">แถว Header (ปกติ=1)</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={newSheetHeaderRow}
+                                  onChange={e => setNewSheetHeaderRow(e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleAddSheet(hosp.id)}
@@ -1040,7 +1105,7 @@ CREATE POLICY "Allow anonymous update"
                                 เพิ่ม Sheet
                               </button>
                               <button
-                                onClick={() => { setAddingSheetFor(null); setNewSheetName(''); setNewSheetUrl(''); setNewSheetScript(''); setSheetUrlError(''); setNewScriptUrlError(''); }}
+                                onClick={() => { setAddingSheetFor(null); setNewSheetName(''); setNewSheetUrl(''); setNewSheetScript(''); setNewSheetType('issue'); setNewSheetHeaderRow('1'); setSheetUrlError(''); setNewScriptUrlError(''); }}
                                 className="px-3 py-1.5 text-xs bg-white text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
                               >
                                 ยกเลิก

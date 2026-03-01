@@ -1,4 +1,4 @@
-import type { Issue } from '../types';
+import type { Issue, GenericSheetData, GenericRow } from '../types';
 
 export function parseCSV(csvText: string): Issue[] {
   const lines = parseCsvLines(csvText);
@@ -87,6 +87,35 @@ function parseCsvLines(csv: string): string[][] {
   }
 
   return result;
+}
+
+/**
+ * Parse CSV ทั่วไป — อ่าน header จากแถวแรกของข้อมูล แล้ว map แต่ละแถวเป็น object
+ * headerRow: แถวที่เป็น header ใน sheet จริง (ใช้คำนวณ _rowIndex)
+ */
+export function parseCSVGeneric(csvText: string, headerRow: number = 1): GenericSheetData {
+  const lines = parseCsvLines(csvText);
+  const headerIndex = headerRow - 1; // แปลง 1-based เป็น 0-based index
+  if (lines.length <= headerIndex + 1) return { headers: [], rows: [] };
+
+  // อ่าน header จากแถวที่กำหนด (headerRow)
+  const rawHeaders = lines[headerIndex].map(h => h.trim()).filter(h => h !== '');
+  const rows: GenericRow[] = [];
+
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const cols = lines[i];
+    // ข้ามแถวที่ทุกคอลัมน์ว่าง
+    const hasData = cols.some((c, idx) => idx < rawHeaders.length && c.trim() !== '');
+    if (!hasData) continue;
+
+    const row: GenericRow = { _rowIndex: i + 1 }; // 1-based row ใน sheet จริง
+    for (let j = 0; j < rawHeaders.length; j++) {
+      row[rawHeaders[j]] = cols[j]?.trim() || '';
+    }
+    rows.push(row);
+  }
+
+  return { headers: rawHeaders, rows };
 }
 
 /**
