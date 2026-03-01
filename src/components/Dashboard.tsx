@@ -61,6 +61,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Last updated timestamp
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);
   const sheetType = activeSheet?.sheetType || 'issue';
@@ -87,10 +90,12 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         const data = await fetchGenericSheet(sheetOverride);
         setGenericData(data);
         setIssues([]);
+        setLastUpdated(new Date());
       } else {
         const data = await fetchIssues(sheet);
         setIssues(data);
         setGenericData({ headers: [], rows: [] });
+        setLastUpdated(new Date());
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
@@ -564,7 +569,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         {isGenericSheet ? (
           /* Generic Sheet View */
           <>
-            {/* Refresh button for generic view */}
+            {/* Refresh button + last updated */}
             <div className="flex items-center gap-2">
               <button
                 onClick={loadData}
@@ -576,6 +581,14 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 </svg>
                 รีเฟรช
               </button>
+              {lastUpdated && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  อัปเดตล่าสุด: {lastUpdated.toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
             </div>
             <GenericDataTable
               data={genericData}
@@ -590,6 +603,16 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           <>
             {/* Summary Cards */}
             <SummaryCards issues={validIssues} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
+
+            {/* Last updated */}
+            {lastUpdated && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                อัปเดตล่าสุด: {lastUpdated.toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </div>
+            )}
 
             {/* Filter Bar */}
             <FilterBar
