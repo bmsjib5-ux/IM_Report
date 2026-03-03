@@ -199,36 +199,66 @@ export async function fetchGenericSheet(sheet?: SheetLink): Promise<GenericSheet
   return parseCSVGeneric(csvText, headerRow);
 }
 
+async function postToAppsScript(url: string, payload: string): Promise<boolean> {
+  try {
+    // Try normal fetch first to get server response
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: payload,
+    });
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'ไม่สามารถบันทึกข้อมูลได้');
+    }
+    return true;
+  } catch (error) {
+    // CORS error from Google Apps Script redirect (302 → googleusercontent.com)
+    // With Content-Type: text/plain, no preflight is needed,
+    // so the server already received and processed the request.
+    if (error instanceof TypeError) {
+      // Retry with no-cors to ensure delivery even if first request was blocked
+      try {
+        await fetch(url, {
+          method: 'POST',
+          body: payload,
+          mode: 'no-cors',
+        });
+      } catch {
+        throw new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ กรุณาตรวจสอบ URL และอินเทอร์เน็ต');
+      }
+      // Request sent but can't read response — caller should re-fetch to verify
+      return true;
+    }
+    throw error;
+  }
+}
+
 export async function updateIssue(issue: Issue): Promise<boolean> {
   const sheet = getActiveSheet(getSettings());
   if (!sheet?.appsScriptUrl) {
     throw new Error('กรุณาตั้งค่า Google Apps Script URL ก่อน');
   }
 
-  const response = await fetch(sheet.appsScriptUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      action: 'update',
-      gid: sheet.gid,
-      rowIndex: issue.rowIndex,
-      data: {
-        no: issue.no,
-        department: issue.department,
-        date: issue.date,
-        description: issue.description,
-        category: issue.category,
-        status: issue.status,
-        notes: issue.notes,
-        reporter: issue.reporter,
-        responsible: issue.responsible,
-        editDate: issue.editDate,
-      },
-    }),
+  const payload = JSON.stringify({
+    action: 'update',
+    gid: sheet.gid,
+    rowIndex: issue.rowIndex,
+    data: {
+      no: issue.no,
+      department: issue.department,
+      date: issue.date,
+      description: issue.description,
+      category: issue.category,
+      status: issue.status,
+      notes: issue.notes,
+      reporter: issue.reporter,
+      responsible: issue.responsible,
+      editDate: issue.editDate,
+    },
   });
 
-  const result = await response.json();
-  return result.success;
+  return postToAppsScript(sheet.appsScriptUrl, payload);
 }
 
 export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean> {
@@ -237,27 +267,22 @@ export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean>
     throw new Error('กรุณาตั้งค่า Google Apps Script URL ก่อน');
   }
 
-  const response = await fetch(sheet.appsScriptUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      action: 'add',
-      gid: sheet.gid,
-      data: {
-        no: issue.no,
-        department: issue.department,
-        date: issue.date,
-        description: issue.description,
-        category: issue.category,
-        status: issue.status,
-        notes: issue.notes,
-        reporter: issue.reporter,
-        responsible: issue.responsible,
-        editDate: issue.editDate,
-      },
-    }),
+  const payload = JSON.stringify({
+    action: 'add',
+    gid: sheet.gid,
+    data: {
+      no: issue.no,
+      department: issue.department,
+      date: issue.date,
+      description: issue.description,
+      category: issue.category,
+      status: issue.status,
+      notes: issue.notes,
+      reporter: issue.reporter,
+      responsible: issue.responsible,
+      editDate: issue.editDate,
+    },
   });
 
-  const result = await response.json();
-  return result.success;
+  return postToAppsScript(sheet.appsScriptUrl, payload);
 }

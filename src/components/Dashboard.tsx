@@ -215,9 +215,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     setSaving(true);
     try {
       await updateIssue(issue);
-      setIssues(prev => prev.map(i => (i.rowIndex === issue.rowIndex ? issue : i)));
       setEditingIssue(null);
       showToast('บันทึกสำเร็จ', 'success');
+      await loadData();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด', 'error');
     } finally {
