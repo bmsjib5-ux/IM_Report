@@ -32,10 +32,9 @@ export default function SetupGuideModal({ onClose }: SetupGuideModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
       <div
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="shrink-0">
@@ -251,73 +250,67 @@ export default function SetupGuideModal({ onClose }: SetupGuideModalProps) {
                   title="ลบโค้ดเดิมทั้งหมด แล้ววางโค้ดใหม่"
                   description="ลบโค้ดที่มีอยู่ในไฟล์ Code.gs แล้ววางโค้ดด้านล่างนี้:"
                 >
-                  <div className="mt-2 bg-gray-900 rounded-lg p-3 relative">
-                    <button
-                      onClick={() => {
-                        const code = APPS_SCRIPT_CODE;
-                        navigator.clipboard.writeText(code);
-                      }}
-                      className="absolute top-2 right-2 px-2 py-1 text-[10px] bg-indigo-500 text-white rounded hover:bg-indigo-600 font-medium transition-colors"
-                    >
-                      คัดลอกโค้ด
-                    </button>
-                    <pre className="text-[11px] text-green-400 font-mono overflow-x-auto whitespace-pre leading-relaxed max-h-48 overflow-y-auto">
-{`function doGet(e) { return handleRequest(e); }
-function doPost(e) { return handleRequest(e); }
-
-function handleRequest(e) {
-  var output;
-  try {
-    var params;
-    if (e.postData) {
-      params = JSON.parse(e.postData.contents);
-    } else {
-      return createJsonOutput(getAllData(null));
-    }
-    var action = params.action;
-    var gid = params.gid || null;
-    switch (action) {
-      case 'update':
-        output = updateRow(
-          params.rowIndex, params.data, gid);
-        break;
-      case 'add':
-        output = addRow(params.data, gid);
-        break;
-      default:
-        output = { success: false,
-          error: 'Unknown action' };
-    }
-  } catch (err) {
-    output = { success: false,
-      error: err.toString() };
-  }
-  return createJsonOutput(output);
-}
-
-// ... (ดูโค้ดเต็มในไฟล์ Code.gs)`}</pre>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1.5">
-                    โค้ดเต็มอยู่ในไฟล์ <span className="font-mono bg-gray-100 px-1 rounded">google-apps-script/Code.gs</span> ของโปรเจกต์
-                  </p>
+                  <CodeBlock code={APPS_SCRIPT_CODE} />
                 </StepItem>
 
                 <StepItem
                   number={3}
+                  title='★ กด Run ฟังก์ชัน "authorizeAndTest" เพื่อ Authorize สิทธิ์'
+                  description="ขั้นตอนนี้สำคัญมาก! ถ้าข้ามจะเกิด Error 401 (Unauthorized):"
+                >
+                  <ol className="mt-2 text-xs text-gray-600 space-y-1.5 list-inside">
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.1</span>
+                      <span>ที่ dropdown ด้านบน เลือกฟังก์ชัน <span className="font-semibold text-gray-800 bg-yellow-100 px-1 rounded">authorizeAndTest</span></span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.2</span>
+                      <span>กดปุ่ม <span className="font-semibold text-gray-800">▶ Run</span></span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.3</span>
+                      <span>จะมีหน้าต่างขออนุญาต → กด <span className="font-semibold text-gray-800">Review Permissions</span></span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.4</span>
+                      <span>เลือก <span className="font-semibold text-gray-800">บัญชี Google</span> ของคุณ</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.5</span>
+                      <span>กด <span className="font-semibold text-gray-800">"Advanced"</span> → กด <span className="font-semibold text-gray-800">"Go to [ชื่อโปรเจกต์] (unsafe)"</span></span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.6</span>
+                      <span>กด <span className="font-semibold text-gray-800">"Allow"</span> เพื่ออนุญาตให้ Script เข้าถึง Google Sheet</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="font-bold text-indigo-600 shrink-0">3.7</span>
+                      <span>ดู <span className="font-semibold text-gray-800">Execution log</span> ด้านล่าง → ถ้าเห็น <span className="font-semibold text-emerald-600">"✅ Setup OK!"</span> แสดงว่าพร้อม</span>
+                    </li>
+                  </ol>
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-xs text-red-700 font-medium">
+                      ⚠ ถ้าข้ามขั้นตอนนี้ จะเกิด Error 401 (Unauthorized) เมื่อบันทึกข้อมูลจาก Dashboard
+                    </p>
+                  </div>
+                </StepItem>
+
+                <StepItem
+                  number={4}
                   title="Deploy เป็น Web App"
                   description="ทำตามขั้นตอนดังนี้:"
                 >
                   <ol className="mt-2 text-xs text-gray-600 space-y-1.5 list-inside">
                     <li className="flex gap-2">
-                      <span className="font-bold text-indigo-600 shrink-0">3.1</span>
+                      <span className="font-bold text-indigo-600 shrink-0">4.1</span>
                       <span>คลิก <span className="font-semibold text-gray-800">Deploy</span> {'>'} <span className="font-semibold text-gray-800">New deployment</span></span>
                     </li>
                     <li className="flex gap-2">
-                      <span className="font-bold text-indigo-600 shrink-0">3.2</span>
+                      <span className="font-bold text-indigo-600 shrink-0">4.2</span>
                       <span>คลิกไอคอนเฟือง {'>'} เลือก <span className="font-semibold text-gray-800">Web app</span></span>
                     </li>
                     <li className="flex gap-2">
-                      <span className="font-bold text-indigo-600 shrink-0">3.3</span>
+                      <span className="font-bold text-indigo-600 shrink-0">4.3</span>
                       <span>ตั้งค่า:</span>
                     </li>
                     <li className="ml-8 space-y-1">
@@ -327,22 +320,24 @@ function handleRequest(e) {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-gray-400">Who has access:</span>
-                        <span className="font-semibold text-gray-800 bg-blue-50 px-1.5 py-0.5 rounded">Anyone</span>
+                        <span className="font-semibold text-gray-800 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">Anyone</span>
+                        <span className="text-red-500 font-bold text-[10px]">← สำคัญ!</span>
                       </div>
                     </li>
                     <li className="flex gap-2">
-                      <span className="font-bold text-indigo-600 shrink-0">3.4</span>
+                      <span className="font-bold text-indigo-600 shrink-0">4.4</span>
                       <span>คลิก <span className="font-semibold text-gray-800">Deploy</span></span>
                     </li>
-                    <li className="flex gap-2">
-                      <span className="font-bold text-indigo-600 shrink-0">3.5</span>
-                      <span>คลิก <span className="font-semibold text-gray-800">Authorize access</span> {'>'} เลือกบัญชี Google {'>'} คลิก <span className="font-semibold text-gray-800">Allow</span></span>
-                    </li>
                   </ol>
+                  <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-xs text-amber-700 font-medium">
+                      ⚠ ต้องเลือก "Anyone" ไม่ใช่ "Anyone with Google Account" ถ้าเลือกผิดจะเกิด CORS Error
+                    </p>
+                  </div>
                 </StepItem>
 
                 <StepItem
-                  number={4}
+                  number={5}
                   title="คัดลอก Web App URL"
                   description="หลัง Deploy สำเร็จ จะแสดง URL ของ Web App:"
                 >
@@ -363,6 +358,18 @@ function handleRequest(e) {
                   <p className="text-xs text-gray-500">
                     เมื่อแก้ไขโค้ดแล้ว ต้องไปที่ <span className="font-semibold">Deploy {'>'} Manage deployments {'>'} Edit (ไอคอนดินสอ) {'>'} Version: New version {'>'} Deploy</span>
                   </p>
+                </div>
+
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
+                  <h4 className="text-xs font-bold text-red-700">แก้ไข Error 401 (Unauthorized)</h4>
+                  <p className="text-xs text-red-600">ถ้าบันทึกข้อมูลแล้วเจอ Error 401 ให้ทำตามนี้:</p>
+                  <ol className="text-xs text-red-600 space-y-1 list-decimal list-inside">
+                    <li>เปิด Apps Script Editor (Extensions {'>'} Apps Script)</li>
+                    <li>เลือกฟังก์ชัน <span className="font-mono font-bold">authorizeAndTest</span> แล้วกด ▶ Run</li>
+                    <li>ทำตามขั้นตอน Authorize สิทธิ์ให้ครบ</li>
+                    <li>ไปที่ Deploy {'>'} New deployment → ตั้ง "Anyone" → Deploy</li>
+                    <li>คัดลอก URL ใหม่ไปใส่ในตั้งค่า Dashboard</li>
+                  </ol>
                 </div>
               </div>
             </div>
@@ -597,8 +604,57 @@ function StepItem({ number, title, description, children }: {
   );
 }
 
-/* Apps Script code for copy */
-const APPS_SCRIPT_CODE = `function doGet(e) { return handleRequest(e); }
+/* Code block with copy button + feedback */
+function CodeBlock({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mt-2 bg-gray-900 rounded-lg p-3 relative">
+      <button
+        onClick={handleCopy}
+        className={`absolute top-2 right-2 px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${
+          copied
+            ? 'bg-emerald-500 text-white'
+            : 'bg-indigo-500 text-white hover:bg-indigo-600'
+        }`}
+      >
+        {copied ? 'คัดลอกแล้ว!' : 'คัดลอกโค้ด'}
+      </button>
+      <pre className="text-[11px] text-green-400 font-mono overflow-x-auto whitespace-pre leading-relaxed max-h-64 overflow-y-auto pr-20">
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+/* Apps Script code for copy — full version from Code.gs */
+const APPS_SCRIPT_CODE = `/**
+ * ★★★ ขั้นตอนแรก: เลือกฟังก์ชันนี้แล้วกด Run เพื่อ Authorize สิทธิ์ ★★★
+ */
+function authorizeAndTest() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log('✅ Setup OK! เชื่อมต่อกับ Spreadsheet: ' + ss.getName());
+  Logger.log('URL: ' + ss.getUrl());
+  var sheets = ss.getSheets();
+  Logger.log('พบ ' + sheets.length + ' แท็บ:');
+  for (var i = 0; i < sheets.length; i++) {
+    Logger.log('  - ' + sheets[i].getName() + ' (gid=' + sheets[i].getSheetId() + ', rows=' + sheets[i].getLastRow() + ')');
+  }
+  Logger.log('');
+  Logger.log('★ ขั้นตอนถัดไป: Deploy > New deployment > Web app > Anyone > Deploy');
+}
+
+var REQUIRED_FIELDS_ADD = ['department', 'description'];
+var REQUIRED_FIELDS_UPDATE = ['no'];
+var MAX_TEXT_LENGTH = 5000;
+
+function doGet(e) { return handleRequest(e); }
 function doPost(e) { return handleRequest(e); }
 
 function handleRequest(e) {
@@ -622,6 +678,7 @@ function handleRequest(e) {
       case 'get': output = getAllData(gid); break;
       case 'update': output = updateRow(params.rowIndex, params.data, gid); break;
       case 'add': output = addRow(params.data, gid); break;
+      case 'updateGeneric': output = updateGenericRow(params.rowIndex, params.values, gid, params.headerRow); break;
       default: output = { success: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
@@ -646,14 +703,27 @@ function getSheetByGid(gid) {
       return { success: true, sheet: allSheets[i] };
     }
   }
-  return { success: false, error: 'Sheet not found for gid=' + gid };
+  var available = allSheets.map(function(s) {
+    return s.getName() + ' (gid=' + s.getSheetId() + ')';
+  });
+  return { success: false, error: 'ไม่พบ Sheet gid=' + gid + ' | มี: ' + available.join(', ') };
 }
 
 function sanitizeString(value) {
   if (value === null || value === undefined) return '';
   var str = String(value).trim();
-  if (str.length > 5000) str = str.substring(0, 5000);
+  if (str.length > MAX_TEXT_LENGTH) str = str.substring(0, MAX_TEXT_LENGTH);
   return str;
+}
+
+function validateRequiredFields(data, requiredFields) {
+  var missing = [];
+  for (var i = 0; i < requiredFields.length; i++) {
+    if (!data[requiredFields[i]] || String(data[requiredFields[i]]).trim() === '') {
+      missing.push(requiredFields[i]);
+    }
+  }
+  return missing;
 }
 
 function buildRowValues(data) {
@@ -671,42 +741,146 @@ function buildRowValues(data) {
   ];
 }
 
+function isDuplicateNo(sheet, no, excludeRowIndex) {
+  if (!no || no === '') return false;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return false;
+  var colA = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < colA.length; i++) {
+    var currentRow = i + 2;
+    if (excludeRowIndex && currentRow === excludeRowIndex) continue;
+    if (String(colA[i][0]).trim() === String(no).trim()) return true;
+  }
+  return false;
+}
+
 function getAllData(gid) {
   var result = getSheetByGid(gid);
   if (!result.success) return result;
   var sheet = result.sheet;
+  var lastRow = sheet.getLastRow();
+  if (lastRow === 0) return { success: true, data: [], headers: [] };
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
   var rows = [];
   for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === '' || data[i][0] === null) continue;
     var row = {};
-    for (var j = 0; j < headers.length; j++) {
-      row[headers[j]] = data[i][j];
-    }
+    for (var j = 0; j < headers.length; j++) { row[headers[j]] = data[i][j]; }
     row._rowIndex = i + 1;
     rows.push(row);
   }
-  return { success: true, data: rows, headers: headers };
+  return { success: true, data: rows, headers: headers, sheetName: sheet.getName(), gid: String(sheet.getSheetId()) };
 }
 
 function updateRow(rowIndex, data, gid) {
-  var result = getSheetByGid(gid);
-  if (!result.success) return result;
-  var sheet = result.sheet;
   if (!rowIndex || !data) return { success: false, error: 'Missing params' };
-  var values = buildRowValues(data);
-  sheet.getRange(rowIndex, 1, 1, values.length).setValues([values]);
-  return { success: true, message: 'Row ' + rowIndex + ' updated' };
+  var missing = validateRequiredFields(data, REQUIRED_FIELDS_UPDATE);
+  if (missing.length > 0) return { success: false, error: 'กรุณากรอก: ' + missing.join(', ') };
+  // Lock ป้องกัน concurrent writes
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่' };
+  }
+  try {
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
+    var idx = Number(rowIndex);
+    if (isNaN(idx) || idx <= 1 || idx > sheet.getLastRow()) {
+      return { success: false, error: 'rowIndex ไม่ถูกต้อง: ' + rowIndex };
+    }
+    var existing = sheet.getRange(idx, 1, 1, 10).getValues()[0];
+    if (existing.every(function(c) { return c === '' || c === null; })) {
+      return { success: false, error: 'Row ' + idx + ' ไม่มีข้อมูล' };
+    }
+    if (data.no && String(data.no).trim() !== String(existing[0]).trim()) {
+      if (isDuplicateNo(sheet, data.no, idx)) return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำ' };
+    }
+    var values = buildRowValues(data);
+    sheet.getRange(idx, 1, 1, values.length).setValues([values]);
+    SpreadsheetApp.flush();
+    return { success: true, message: 'อัปเดต row ' + idx + ' สำเร็จ', rowIndex: idx, sheetName: sheet.getName() };
+  } finally { lock.releaseLock(); }
 }
 
 function addRow(data, gid) {
-  var result = getSheetByGid(gid);
-  if (!result.success) return result;
-  var sheet = result.sheet;
   if (!data) return { success: false, error: 'Missing data' };
-  var lastRow = sheet.getLastRow();
-  var newRow = lastRow + 1;
-  var values = buildRowValues(data);
-  sheet.getRange(newRow, 1, 1, values.length).setValues([values]);
-  return { success: true, message: 'Row added at ' + newRow, rowIndex: newRow };
+  var missing = validateRequiredFields(data, REQUIRED_FIELDS_ADD);
+  if (missing.length > 0) return { success: false, error: 'กรุณากรอก: ' + missing.join(', ') };
+  // Lock ป้องกัน concurrent writes — ไม่ให้จอง slot ซ้ำ
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่' };
+  }
+  try {
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
+    if (data.no && isDuplicateNo(sheet, data.no, null)) {
+      return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำ' };
+    }
+    var lastRow = sheet.getLastRow();
+    var newRow = lastRow + 1;
+    if (lastRow >= 2) {
+      // อ่านทุกคอลัมน์ทีเดียว (batch read เร็วกว่า row-by-row)
+      var allData = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+      var lastFilled = 1;
+      for (var i = 0; i < allData.length; i++) {
+        if (allData[i][3] !== '' && allData[i][3] !== null) lastFilled = i + 2;
+      }
+      newRow = lastFilled + 1;
+      // ข้ามแถวที่มีคนจองไว้ (ใช้ข้อมูลที่อ่านมาแล้ว ไม่เรียก API เพิ่ม)
+      while (newRow <= lastRow) {
+        var rd = allData[newRow - 2];
+        if (rd.every(function(c) { return c === '' || c === null; })) break;
+        newRow++;
+      }
+    }
+    var values = buildRowValues(data);
+    sheet.getRange(newRow, 1, 1, values.length).setValues([values]);
+    SpreadsheetApp.flush();
+    return { success: true, message: 'เพิ่มรายการ row ' + newRow + ' สำเร็จ', rowIndex: newRow, sheetName: sheet.getName() };
+  } finally { lock.releaseLock(); }
+}
+
+function updateGenericRow(rowIndex, values, gid, headerRow) {
+  if (!rowIndex || !values || !Array.isArray(values)) return { success: false, error: 'Missing params' };
+  if (!headerRow || headerRow < 1) headerRow = 1;
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่' };
+  }
+  try {
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
+    var idx = Number(rowIndex);
+    if (isNaN(idx) || idx <= headerRow || idx > sheet.getLastRow()) {
+      return { success: false, error: 'rowIndex ไม่ถูกต้อง: ' + rowIndex };
+    }
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    var numCols = 0;
+    for (var i = 0; i < headers.length; i++) {
+      if (String(headers[i]).trim() !== '') numCols = i + 1;
+    }
+    if (numCols === 0) return { success: false, error: 'ไม่พบ header ในแถว ' + headerRow };
+    var existing = sheet.getRange(idx, 1, 1, numCols).getValues()[0];
+    if (existing.every(function(c) { return c === '' || c === null; })) {
+      return { success: false, error: 'Row ' + idx + ' ไม่มีข้อมูล' };
+    }
+    var sanitized = [];
+    for (var j = 0; j < numCols; j++) {
+      var rawVal = j < values.length ? values[j] : '';
+      if (typeof existing[j] === 'boolean') {
+        sanitized.push(String(rawVal).toUpperCase() === 'TRUE');
+      } else {
+        sanitized.push(sanitizeString(rawVal));
+      }
+    }
+    sheet.getRange(idx, 1, 1, numCols).setValues([sanitized]);
+    SpreadsheetApp.flush();
+    return { success: true, message: 'อัปเดต row ' + idx + ' สำเร็จ', rowIndex: idx, sheetName: sheet.getName() };
+  } finally { lock.releaseLock(); }
 }`;

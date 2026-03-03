@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Issue, SortConfig, AppSettings, GenericSheetData } from '../types';
+import type { Issue, SortConfig, AppSettings, GenericSheetData, GenericRow } from '../types';
 import { SHEET_TYPE_CONFIG } from '../types';
-import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
+import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
 import { isSupabaseConfigured } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
@@ -12,6 +12,7 @@ import DataTable from './DataTable';
 import GenericDataTable from './GenericDataTable';
 import EditModal from './EditModal';
 import AddModal from './AddModal';
+import GenericEditModal from './GenericEditModal';
 import SettingsModal from './SettingsModal';
 import SetupGuideModal from './SetupGuideModal';
 import Sidebar from './Sidebar';
@@ -46,6 +47,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
   // Modals
   const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
+  const [editingGenericRow, setEditingGenericRow] = useState<GenericRow | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -89,7 +91,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         const sheetOverride = typeConfig?.headerRow !== undefined
           ? { ...sheet!, headerRow: typeConfig.headerRow }
           : sheet;
-        const data = await fetchGenericSheet(sheetOverride);
+        const data = await fetchGenericSheet(sheetOverride, typeConfig?.columnOverrides);
         setGenericData(data);
         setIssues([]);
         setLastUpdated(new Date());
@@ -216,8 +218,29 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     try {
       await updateIssue(issue);
       setEditingIssue(null);
+      // อัปเดต state ทันที (optimistic update) → ไม่ต้องรอ re-fetch
+      setIssues(prev => prev.map(i => i.rowIndex === issue.rowIndex ? issue : i));
       showToast('บันทึกสำเร็จ', 'success');
-      await loadData();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenericEditSave = async (updatedRow: GenericRow) => {
+    setSaving(true);
+    try {
+      const typeConfig = SHEET_TYPE_CONFIG[sheetType as keyof typeof SHEET_TYPE_CONFIG];
+      const headerRow = typeConfig?.headerRow || activeSheet?.headerRow || 1;
+      await updateGenericRow(updatedRow, genericData.headers, headerRow);
+      setEditingGenericRow(null);
+      // Optimistic update
+      setGenericData(prev => ({
+        ...prev,
+        rows: prev.rows.map(r => r._rowIndex === updatedRow._rowIndex ? updatedRow : r),
+      }));
+      showToast('บันทึกสำเร็จ', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด', 'error');
     } finally {
@@ -616,7 +639,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               loading={loading && genericData.rows.length === 0}
               columns={SHEET_TYPE_CONFIG[sheetType]?.columns}
               statusField={SHEET_TYPE_CONFIG[sheetType]?.statusField}
+              statusOptions={SHEET_TYPE_CONFIG[sheetType]?.statusOptions}
               requiredField={SHEET_TYPE_CONFIG[sheetType]?.requiredField}
+              checkboxFields={SHEET_TYPE_CONFIG[sheetType]?.checkboxFields}
+              onRowClick={activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
             />
           </>
         ) : (
@@ -689,6 +715,46 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           saving={saving}
         />
       )}
+
+      {editingGenericRow && (() => {
+        const typeConfig = SHEET_TYPE_CONFIG[sheetType];
+        const sf = typeConfig?.statusField;
+        const sfArr = sf ? (Array.isArray(sf) ? sf : [sf]) : [];
+        // ใช้ statusOptions จาก config ก่อน, ถ้าไม่มีก็ดึงจากข้อมูลจริง
+        const configOpts = typeConfig?.statusOptions;
+        const dataOpts = Array.from(new Set(
+          genericData.rows.flatMap(r => sfArr.map(f => String(r[f] || '').trim()).filter(Boolean))
+        ));
+        // รวม: config options + ค่าจากข้อมูลที่ยังไม่มีใน config
+        const opts = configOpts
+          ? [...configOpts, ...dataOpts.filter(o => !configOpts.includes(o))]
+          : dataOpts;
+        // สร้าง dropdownOptions: ใช้ตัวเลือกจาก config + รวมค่าจากข้อมูลจริง
+        const ddOpts: Record<string, string[]> = {};
+        if (typeConfig?.dropdownOptions) {
+          for (const [field, configValues] of Object.entries(typeConfig.dropdownOptions)) {
+            const dataValues = Array.from(new Set(
+              genericData.rows.map(r => String(r[field] || '').trim()).filter(Boolean)
+            )).sort((a, b) => a.localeCompare(b, 'th'));
+            // config options มาก่อน + เพิ่มค่าจากข้อมูลจริงที่ยังไม่มีใน config
+            ddOpts[field] = [...configValues, ...dataValues.filter(v => !configValues.includes(v))];
+          }
+        }
+        return (
+          <GenericEditModal
+            row={editingGenericRow}
+            headers={genericData.headers}
+            columns={SHEET_TYPE_CONFIG[sheetType]?.columns}
+            statusField={sf}
+            statusOptions={opts}
+            checkboxFields={typeConfig?.checkboxFields}
+            dropdownOptions={ddOpts}
+            onClose={() => setEditingGenericRow(null)}
+            onSave={handleGenericEditSave}
+            saving={saving}
+          />
+        );
+      })()}
 
       {showAddModal && (
         <AddModal

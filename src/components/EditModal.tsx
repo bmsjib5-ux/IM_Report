@@ -29,10 +29,9 @@ export default function EditModal({ issue, onClose, onSave, saving }: EditModalP
   const labelClass = "block text-sm font-semibold text-gray-700 mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm" onClick={onClose} style={{ animation: 'fadeIn 0.2s ease-out' }}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-sm" style={{ animation: 'fadeIn 0.2s ease-out' }}>
       <div
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-y-auto border-0 sm:border border-gray-100"
-        onClick={e => e.stopPropagation()}
         style={{ animation: 'scaleIn 0.2s ease-out' }}
       >
         <div className="relative px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100">

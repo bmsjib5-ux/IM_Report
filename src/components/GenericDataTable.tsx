@@ -6,7 +6,10 @@ interface GenericDataTableProps {
   loading?: boolean;
   columns?: string[];       // ถ้ากำหนด จะแสดงเฉพาะคอลัมน์เหล่านี้ตามลำดับ
   statusField?: string | string[];     // ชื่อคอลัมน์สถานะ — string = 1 กลุ่ม, array = หลายกลุ่ม
+  statusOptions?: string[];            // ตัวเลือกสถานะที่กำหนดไว้ล่วงหน้า (แสดง card ครบตามลำดับ)
   requiredField?: string | string[];   // ชื่อคอลัมน์ที่ต้องไม่ว่าง — string = ต้องมีค่า, array = OR (มีอย่างใดอย่างหนึ่ง)
+  checkboxFields?: string[];           // คอลัมน์ที่เป็น checkbox (TRUE/FALSE → ✓/✗)
+  onRowClick?: (row: GenericRow) => void;  // คลิกแถวเพื่อแก้ไข
 }
 
 // สีตามชื่อสถานะ (ใช้ทั้ง card + เซลล์ในตาราง)
@@ -20,6 +23,10 @@ const STATUS_STYLE_MAP: Record<string, {
   'ตรวจสอบแล้ว':    { gradient: 'from-blue-500 to-indigo-600',  text: 'text-blue-700',    border: 'border-blue-200',    ring: 'ring-blue-300',    cellBg: 'bg-blue-50',   cellText: 'text-blue-700' },
   'ดำเนินการแล้ว':   { gradient: 'from-emerald-500 to-green-600', text: 'text-emerald-700', border: 'border-emerald-200', ring: 'ring-emerald-300', cellBg: 'bg-emerald-50',cellText: 'text-emerald-700' },
   'ไม่สามารถทำได้':  { gradient: 'from-rose-500 to-red-600',     text: 'text-rose-700',    border: 'border-rose-200',    ring: 'ring-rose-300',    cellBg: 'bg-rose-50',   cellText: 'text-rose-700' },
+  'ต้องแก้ไข':       { gradient: 'from-red-400 to-rose-500',     text: 'text-red-700',     border: 'border-red-200',     ring: 'ring-red-300',     cellBg: 'bg-red-50',    cellText: 'text-red-700' },
+  'เจ้าหน้าที่ตรวจแล้ว': { gradient: 'from-teal-400 to-cyan-500', text: 'text-teal-700',   border: 'border-teal-200',   ring: 'ring-teal-300',   cellBg: 'bg-teal-50',  cellText: 'text-teal-700' },
+  'แก้ไขแล้ว':       { gradient: 'from-green-400 to-emerald-500', text: 'text-green-700',  border: 'border-green-200',  ring: 'ring-green-300',  cellBg: 'bg-green-50', cellText: 'text-green-700' },
+  'ใช้แบบเดิม':      { gradient: 'from-violet-400 to-purple-500', text: 'text-violet-700', border: 'border-violet-200', ring: 'ring-violet-300', cellBg: 'bg-violet-50',cellText: 'text-violet-700' },
 };
 
 // สีสำรอง (สำหรับสถานะที่ไม่ได้กำหนดไว้ — สีเทา)
@@ -32,8 +39,27 @@ function getStatusStyle(status: string) {
   return STATUS_STYLE_MAP[status] || FALLBACK_STYLE;
 }
 
-export default function GenericDataTable({ data, loading, columns, statusField, requiredField }: GenericDataTableProps) {
+// Render checkbox value (TRUE → green check, FALSE/empty → gray dash)
+function renderCheckbox(val: string) {
+  const checked = val.toUpperCase() === 'TRUE';
+  return checked ? (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-100 text-emerald-600">
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    </span>
+  ) : (
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-gray-100 text-gray-400">
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6" />
+      </svg>
+    </span>
+  );
+}
+
+export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, onRowClick }: GenericDataTableProps) {
   const { rows: rawRows } = data;
+  const cbFields = useMemo(() => new Set(checkboxFields || []), [checkboxFields]);
 
   // ถ้ามี columns prop ให้แสดงเฉพาะคอลัมน์ที่กำหนด (เฉพาะที่มีอยู่จริงใน data)
   const headers = columns
@@ -56,6 +82,7 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
   }, [statusField]);
 
   // นับสถานะแยกตามแต่ละ field (ใช้ validRows)
+  // ถ้ามี statusOptions → แสดงครบตามลำดับที่กำหนด (รวม count=0) + ค่าจากข้อมูลที่ไม่อยู่ใน config
   const statusGroups = useMemo(() => {
     return statusFields.map(field => {
       const counts = new Map<string, number>();
@@ -64,12 +91,23 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
         if (!val) continue;
         counts.set(val, (counts.get(val) || 0) + 1);
       }
+      // ถ้ามี statusOptions ให้ใช้ลำดับจาก config + เพิ่มค่าจากข้อมูลที่ไม่อยู่ใน config
+      if (statusOptions && statusOptions.length > 0) {
+        const ordered = statusOptions.map(s => ({ status: s, count: counts.get(s) || 0 }));
+        // เพิ่มสถานะที่มีในข้อมูลแต่ไม่มีใน config
+        for (const [status, count] of counts) {
+          if (!statusOptions.includes(status)) {
+            ordered.push({ status, count });
+          }
+        }
+        return { field, counts: ordered };
+      }
       return {
         field,
         counts: Array.from(counts.entries()).map(([status, count]) => ({ status, count })),
       };
     });
-  }, [validRows, statusFields]);
+  }, [validRows, statusFields, statusOptions]);
 
   // Search
   const [searchText, setSearchText] = useState('');
@@ -164,17 +202,21 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
   const renderMobileCard = (row: GenericRow, idx: number) => (
     <div
       key={row._rowIndex || idx}
-      className="rounded-xl border border-gray-100 p-3.5 bg-white/80"
+      onClick={() => onRowClick?.(row)}
+      className={`rounded-xl border border-gray-100 p-3.5 bg-white/80 ${onRowClick ? 'cursor-pointer active:scale-[0.98] hover:shadow-md transition-all' : ''}`}
     >
       {headers.slice(0, 6).map(h => {
         const val = String(row[h] || '');
         if (!val) return null;
         const isStatus = statusFields.includes(h);
+        const isCheckbox = cbFields.has(h);
         const statusStyle = isStatus ? STATUS_STYLE_MAP[val] : null;
         return (
-          <div key={h} className="flex gap-2 py-0.5">
+          <div key={h} className="flex gap-2 py-0.5 items-center">
             <span className="text-xs text-gray-400 shrink-0 w-24 truncate">{h}:</span>
-            {isStatus && statusStyle ? (
+            {isCheckbox ? (
+              renderCheckbox(val)
+            ) : isStatus && statusStyle ? (
               <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusStyle.cellBg} ${statusStyle.cellText}`}>
                 {val}
               </span>
@@ -372,16 +414,20 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                 paginatedRows.map((row, idx) => (
                   <tr
                     key={row._rowIndex || idx}
-                    className="hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40"
+                    onClick={() => onRowClick?.(row)}
+                    className={`hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40 ${onRowClick ? 'cursor-pointer' : ''}`}
                   >
                     <td className="px-2 py-1.5 text-center text-gray-400 text-xs">{startIndex + idx + 1}</td>
                     {headers.map(h => {
                       const val = String(row[h] || '');
                       const isStatus = statusFields.includes(h) && val;
+                      const isCheckbox = cbFields.has(h);
                       const statusStyle = isStatus ? STATUS_STYLE_MAP[val] : null;
                       return (
                         <td key={h} className="px-2 py-1.5">
-                          {isStatus && statusStyle ? (
+                          {isCheckbox ? (
+                            renderCheckbox(val)
+                          ) : isStatus && statusStyle ? (
                             <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyle.cellBg} ${statusStyle.cellText}`}>
                               {val}
                             </span>

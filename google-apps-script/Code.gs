@@ -19,11 +19,41 @@
  * หมายเหตุ: เมื่อแก้ไขโค้ด ต้อง Deploy > Manage deployments > Edit > New version
  */
 
-// คอลัมน์ที่ใช้งาน (A-I)
-var VALID_COLUMNS = ['no', 'department', 'date', 'description', 'category', 'status', 'notes', 'reporter', 'responsible'];
+// คอลัมน์ที่ใช้งาน (A-J)
+var VALID_COLUMNS = ['no', 'department', 'date', 'description', 'category', 'status', 'notes', 'reporter', 'responsible', 'editDate'];
 var REQUIRED_FIELDS_ADD = ['department', 'description'];
 var REQUIRED_FIELDS_UPDATE = ['no'];
 var MAX_TEXT_LENGTH = 5000;
+
+/**
+ * ★★★ ขั้นตอนแรก: กดปุ่ม Run ที่ฟังก์ชันนี้เพื่อ Authorize สิทธิ์ ★★★
+ *
+ * เลือกฟังก์ชันนี้จาก dropdown แล้วกด ▶ Run
+ * จะมีหน้าต่างขออนุญาต → กด "Review Permissions" → เลือก Google Account
+ * → กด "Advanced" → กด "Go to [project name] (unsafe)" → กด "Allow"
+ *
+ * หลัง Authorize สำเร็จ ให้ดูผลลัพธ์ที่ Execution log ด้านล่าง
+ * ถ้าเห็น "✅ Setup OK!" แสดงว่าพร้อมใช้งาน → ไป Deploy ได้เลย
+ */
+function authorizeAndTest() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log('✅ Setup OK! เชื่อมต่อกับ Spreadsheet: ' + ss.getName());
+  Logger.log('URL: ' + ss.getUrl());
+
+  var sheets = ss.getSheets();
+  Logger.log('พบ ' + sheets.length + ' แท็บ:');
+  for (var i = 0; i < sheets.length; i++) {
+    Logger.log('  - ' + sheets[i].getName() + ' (gid=' + sheets[i].getSheetId() + ', rows=' + sheets[i].getLastRow() + ')');
+  }
+
+  Logger.log('');
+  Logger.log('★ ขั้นตอนถัดไป:');
+  Logger.log('  1. ไปที่ Deploy > New deployment');
+  Logger.log('  2. Type: Web app');
+  Logger.log('  3. Execute as: Me');
+  Logger.log('  4. Who has access: Anyone');
+  Logger.log('  5. กด Deploy → คัดลอก URL ไปใส่ในตั้งค่า Dashboard');
+}
 
 function doGet(e) {
   return handleRequest(e);
@@ -69,6 +99,9 @@ function handleRequest(e) {
         break;
       case 'add':
         output = addRow(params.data, gid);
+        break;
+      case 'updateGeneric':
+        output = updateGenericRow(params.rowIndex, params.values, gid, params.headerRow);
         break;
       default:
         output = { success: false, error: 'Unknown action: ' + action };
@@ -254,12 +287,7 @@ function getAllData(gid) {
 }
 
 function updateRow(rowIndex, data, gid) {
-  // 1. หา sheet tab จาก gid
-  var result = getSheetByGid(gid);
-  if (!result.success) return result;
-  var sheet = result.sheet;
-
-  // 2. ตรวจสอบ parameter พื้นฐาน
+  // 1. ตรวจสอบ parameter พื้นฐาน (ก่อน lock)
   if (rowIndex === null || rowIndex === undefined) {
     return { success: false, error: 'กรุณาระบุ rowIndex' };
   }
@@ -267,100 +295,238 @@ function updateRow(rowIndex, data, gid) {
     return { success: false, error: 'กรุณาระบุ data เป็น object' };
   }
 
-  // 3. ตรวจสอบ rowIndex อยู่ในช่วงที่ถูกต้อง
-  var rowCheck = validateRowIndex(rowIndex, sheet);
-  if (!rowCheck.valid) {
-    return { success: false, error: rowCheck.error };
-  }
-
-  // 4. ตรวจสอบว่า row นั้นมีข้อมูลอยู่จริง
-  var existingRow = sheet.getRange(rowCheck.index, 1, 1, 10).getValues()[0];
-  var isEmpty = existingRow.every(function(cell) {
-    return cell === '' || cell === null || cell === undefined;
-  });
-  if (isEmpty) {
-    return { success: false, error: 'Row ' + rowCheck.index + ' ไม่มีข้อมูล ไม่สามารถแก้ไขได้' };
-  }
-
-  // 5. ตรวจสอบ required fields
   var missingFields = validateRequiredFields(data, REQUIRED_FIELDS_UPDATE);
   if (missingFields.length > 0) {
     return { success: false, error: 'กรุณากรอกข้อมูลที่จำเป็น: ' + missingFields.join(', ') };
   }
 
-  // 6. ตรวจสอบ date format (ถ้ามี)
   if (data.date && !validateDate(data.date)) {
     return { success: false, error: 'รูปแบบวันที่ไม่ถูกต้อง (ใช้ dd/mm/yyyy)' };
   }
 
-  // 7. ตรวจสอบลำดับซ้ำ (ถ้าเปลี่ยน no)
-  if (data.no && String(data.no).trim() !== String(existingRow[0]).trim()) {
-    if (isDuplicateNo(sheet, data.no, rowCheck.index)) {
-      return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำกับรายการที่มีอยู่แล้ว' };
-    }
+  // 2. ใช้ LockService ป้องกัน concurrent writes
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกข้อมูลอยู่ กรุณาลองใหม่อีกครั้ง' };
   }
 
-  // 8. Sanitize และบันทึก
-  var values = buildRowValues(data);
-  sheet.getRange(rowCheck.index, 1, 1, values.length).setValues([values]);
+  try {
+    // 3. หา sheet tab จาก gid
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
 
-  return {
-    success: true,
-    message: 'อัปเดต row ' + rowCheck.index + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
-    rowIndex: rowCheck.index,
-    sheetName: sheet.getName()
-  };
+    // 4. ตรวจสอบ rowIndex อยู่ในช่วงที่ถูกต้อง
+    var rowCheck = validateRowIndex(rowIndex, sheet);
+    if (!rowCheck.valid) {
+      return { success: false, error: rowCheck.error };
+    }
+
+    // 5. ตรวจสอบว่า row นั้นมีข้อมูลอยู่จริง
+    var existingRow = sheet.getRange(rowCheck.index, 1, 1, 10).getValues()[0];
+    var isEmpty = existingRow.every(function(cell) {
+      return cell === '' || cell === null || cell === undefined;
+    });
+    if (isEmpty) {
+      return { success: false, error: 'Row ' + rowCheck.index + ' ไม่มีข้อมูล ไม่สามารถแก้ไขได้' };
+    }
+
+    // 6. ตรวจสอบลำดับซ้ำ (ถ้าเปลี่ยน no)
+    if (data.no && String(data.no).trim() !== String(existingRow[0]).trim()) {
+      if (isDuplicateNo(sheet, data.no, rowCheck.index)) {
+        return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำกับรายการที่มีอยู่แล้ว' };
+      }
+    }
+
+    // 7. Sanitize และบันทึก
+    var values = buildRowValues(data);
+    sheet.getRange(rowCheck.index, 1, 1, values.length).setValues([values]);
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: 'อัปเดต row ' + rowCheck.index + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
+      rowIndex: rowCheck.index,
+      sheetName: sheet.getName()
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function addRow(data, gid) {
-  // 1. หา sheet tab จาก gid
-  var result = getSheetByGid(gid);
-  if (!result.success) return result;
-  var sheet = result.sheet;
-
-  // 2. ตรวจสอบ parameter พื้นฐาน
+  // 1. ตรวจสอบ parameter พื้นฐาน (ก่อน lock เพื่อไม่ให้ hold lock นาน)
   if (!data || typeof data !== 'object') {
     return { success: false, error: 'กรุณาระบุ data เป็น object' };
   }
 
-  // 3. ตรวจสอบ required fields
   var missingFields = validateRequiredFields(data, REQUIRED_FIELDS_ADD);
   if (missingFields.length > 0) {
     return { success: false, error: 'กรุณากรอกข้อมูลที่จำเป็น: ' + missingFields.join(', ') };
   }
 
-  // 4. ตรวจสอบ date format (ถ้ามี)
   if (data.date && !validateDate(data.date)) {
     return { success: false, error: 'รูปแบบวันที่ไม่ถูกต้อง (ใช้ dd/mm/yyyy)' };
   }
 
-  // 5. ตรวจสอบลำดับซ้ำ
-  if (data.no && isDuplicateNo(sheet, data.no, null)) {
-    return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำกับรายการที่มีอยู่แล้ว' };
+  // 2. ใช้ LockService ป้องกันการเขียนซ้อนกัน (concurrent writes)
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000); // รอ lock สูงสุด 15 วินาที
+  } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกข้อมูลอยู่ กรุณาลองใหม่อีกครั้ง' };
   }
 
-  // 6. หาแถวถัดไปที่จะเพิ่มข้อมูล
-  var lastRow = sheet.getLastRow();
-  var newRow = lastRow + 1;
+  try {
+    // 3. หา sheet tab จาก gid (ภายใน lock)
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
 
-  if (lastRow >= 2) {
-    var colA = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    for (var i = colA.length - 1; i >= 0; i--) {
-      if (colA[i][0] !== '' && colA[i][0] !== null) {
-        newRow = i + 3;
-        break;
+    // 4. ตรวจสอบลำดับซ้ำ (ภายใน lock เพื่อข้อมูลล่าสุด)
+    if (data.no && isDuplicateNo(sheet, data.no, null)) {
+      return { success: false, error: 'ลำดับ "' + data.no + '" ซ้ำกับรายการที่มีอยู่แล้ว' };
+    }
+
+    // 5. หาแถวที่จะเพิ่มข้อมูล (batch read ครั้งเดียว เร็วกว่า row-by-row)
+    var lastRow = sheet.getLastRow();
+    var newRow = lastRow + 1;
+
+    if (lastRow >= 2) {
+      // อ่านทุกคอลัมน์ (A-J) ทีเดียว → ไม่ต้อง getRange ทีละแถว
+      var allData = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+
+      // หาแถวสุดท้ายที่มีรายละเอียดปัญหา (column D) อยู่จริง
+      var lastFilledRow = 1; // row 1 = header
+      for (var i = 0; i < allData.length; i++) {
+        var hasDescription = allData[i][3] !== '' && allData[i][3] !== null && allData[i][3] !== undefined;
+        if (hasDescription) {
+          lastFilledRow = i + 2; // i=0 → row 2
+        }
+      }
+
+      // เริ่มจากแถวหลังข้อมูลล่าสุด
+      newRow = lastFilledRow + 1;
+
+      // ตรวจสอบว่าแถวนั้นว่างจริง (ใช้ข้อมูลที่อ่านมาแล้ว ไม่ต้องเรียก API เพิ่ม)
+      while (newRow <= lastRow) {
+        var rowData = allData[newRow - 2]; // allData[0] = row 2
+        var isRowEmpty = rowData.every(function(cell) {
+          return cell === '' || cell === null || cell === undefined;
+        });
+        if (isRowEmpty) {
+          break; // แถวนี้ว่าง ใช้ได้
+        }
+        newRow++; // แถวนี้มีคนจองแล้ว ไปแถวถัดไป
       }
     }
+
+    // 6. Sanitize และบันทึก
+    var values = buildRowValues(data);
+    sheet.getRange(newRow, 1, 1, values.length).setValues([values]);
+
+    // 7. Force flush เพื่อให้แน่ใจว่าเขียนสำเร็จก่อนปล่อย lock
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: 'เพิ่มรายการที่ row ' + newRow + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
+      rowIndex: newRow,
+      sheetName: sheet.getName()
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ========== Generic Sheet Update ==========
+
+/**
+ * อัปเดตแถวใน sheet ทั่วไป (form, report, assessment)
+ * รับ values เป็น array ตามลำดับคอลัมน์ แทนที่จะใช้ field name เหมือน updateRow
+ *
+ * @param {number} rowIndex - แถวที่จะอัปเดต (1-based)
+ * @param {Array} values - ค่าที่จะเขียน ตามลำดับคอลัมน์
+ * @param {string} gid - Sheet tab ID
+ * @param {number} headerRow - แถวที่เป็น header (default=1)
+ */
+function updateGenericRow(rowIndex, values, gid, headerRow) {
+  // 1. ตรวจสอบ parameter
+  if (rowIndex === null || rowIndex === undefined) {
+    return { success: false, error: 'กรุณาระบุ rowIndex' };
+  }
+  if (!values || !Array.isArray(values)) {
+    return { success: false, error: 'กรุณาระบุ values เป็น array' };
+  }
+  if (!headerRow || headerRow < 1) {
+    headerRow = 1;
   }
 
-  // 7. Sanitize และบันทึก
-  var values = buildRowValues(data);
-  sheet.getRange(newRow, 1, 1, values.length).setValues([values]);
+  // 2. LockService
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่อีกครั้ง' };
+  }
 
-  return {
-    success: true,
-    message: 'เพิ่มรายการที่ row ' + newRow + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
-    rowIndex: newRow,
-    sheetName: sheet.getName()
-  };
+  try {
+    // 3. หา sheet
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
+
+    // 4. ตรวจสอบ rowIndex
+    var idx = Number(rowIndex);
+    if (isNaN(idx) || idx <= headerRow || idx > sheet.getLastRow()) {
+      return { success: false, error: 'rowIndex ไม่ถูกต้อง: ' + rowIndex + ' (header อยู่แถว ' + headerRow + ', มีข้อมูล ' + sheet.getLastRow() + ' แถว)' };
+    }
+
+    // 5. อ่าน header row เพื่อนับจำนวนคอลัมน์จริง
+    var lastCol = sheet.getLastColumn();
+    var headerValues = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    var numCols = 0;
+    for (var i = 0; i < headerValues.length; i++) {
+      if (String(headerValues[i]).trim() !== '') numCols = i + 1;
+    }
+    if (numCols === 0) {
+      return { success: false, error: 'ไม่พบ header ในแถวที่ ' + headerRow };
+    }
+
+    // 6. ตรวจสอบว่า row มีข้อมูลอยู่จริง
+    var existingRow = sheet.getRange(idx, 1, 1, numCols).getValues()[0];
+    var isEmpty = existingRow.every(function(cell) {
+      return cell === '' || cell === null || cell === undefined;
+    });
+    if (isEmpty) {
+      return { success: false, error: 'Row ' + idx + ' ไม่มีข้อมูล ไม่สามารถแก้ไขได้' };
+    }
+
+    // 7. Sanitize + pad/trim ให้ตรงจำนวนคอลัมน์
+    //    ถ้าคอลัมน์เดิมเป็น boolean (checkbox) → แปลง "TRUE"/"FALSE" กลับเป็น boolean
+    var sanitized = [];
+    for (var j = 0; j < numCols; j++) {
+      var rawVal = j < values.length ? values[j] : '';
+      if (typeof existingRow[j] === 'boolean') {
+        sanitized.push(String(rawVal).toUpperCase() === 'TRUE');
+      } else {
+        sanitized.push(sanitizeString(rawVal));
+      }
+    }
+
+    // 8. เขียนข้อมูล
+    sheet.getRange(idx, 1, 1, numCols).setValues([sanitized]);
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: 'อัปเดต row ' + idx + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
+      rowIndex: idx,
+      sheetName: sheet.getName()
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }

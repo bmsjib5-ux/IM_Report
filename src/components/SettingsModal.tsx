@@ -16,11 +16,9 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ settings, onClose, onSave }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('sheets');
+  const [activeTab, setActiveTab] = useState<TabId>('supabase');
   const [form, setForm] = useState<AppSettings>(JSON.parse(JSON.stringify(settings)));
-  const [expandedHospital, setExpandedHospital] = useState<string | null>(
-    form.hospitals.length > 0 ? form.hospitals[0].id : null
-  );
+  const [expandedHospital, setExpandedHospital] = useState<string | null>(null);
 
   // Add hospital form
   const [showAddHospital, setShowAddHospital] = useState(false);
@@ -391,10 +389,9 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50">
       <div
         className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] border-0 sm:border flex flex-col"
-        onClick={e => e.stopPropagation()}
       >
         {/* Header + Tabs */}
         <div className="shrink-0">

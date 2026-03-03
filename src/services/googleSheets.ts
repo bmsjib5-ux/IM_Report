@@ -1,4 +1,4 @@
-import type { Issue, AppSettings, SheetLink, Hospital, GenericSheetData } from '../types';
+import type { Issue, AppSettings, SheetLink, Hospital, GenericSheetData, GenericRow } from '../types';
 import { parseCSV, parseCSVGeneric, extractSheetInfo } from '../utils/csvParser';
 import { generateId } from '../types';
 import { getSupabaseConfig, loadSettingsFromSupabase, saveSettingsToSupabase } from './supabase';
@@ -181,7 +181,7 @@ export async function fetchIssues(sheet?: SheetLink): Promise<Issue[]> {
   return parseCSV(csvText);
 }
 
-export async function fetchGenericSheet(sheet?: SheetLink): Promise<GenericSheetData> {
+export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Record<number, string>): Promise<GenericSheetData> {
   const target = sheet || getActiveSheet(getSettings());
   if (!target) {
     throw new Error('ไม่พบ Sheet ที่เลือก กรุณาตั้งค่าก่อน');
@@ -196,7 +196,7 @@ export async function fetchGenericSheet(sheet?: SheetLink): Promise<GenericSheet
 
   const csvText = await response.text();
   const headerRow = target.headerRow || 1;
-  return parseCSVGeneric(csvText, headerRow);
+  return parseCSVGeneric(csvText, headerRow, columnOverrides);
 }
 
 async function postToAppsScript(url: string, payload: string): Promise<boolean> {
@@ -214,10 +214,9 @@ async function postToAppsScript(url: string, payload: string): Promise<boolean> 
     return true;
   } catch (error) {
     // CORS error from Google Apps Script redirect (302 → googleusercontent.com)
-    // With Content-Type: text/plain, no preflight is needed,
-    // so the server already received and processed the request.
+    // Common causes: 401 (wrong deployment) or missing CORS headers
     if (error instanceof TypeError) {
-      // Retry with no-cors to ensure delivery even if first request was blocked
+      // Retry with no-cors mode as fallback
       try {
         await fetch(url, {
           method: 'POST',
@@ -225,9 +224,20 @@ async function postToAppsScript(url: string, payload: string): Promise<boolean> 
           mode: 'no-cors',
         });
       } catch {
-        throw new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ กรุณาตรวจสอบ URL และอินเทอร์เน็ต');
+        // Both cors and no-cors failed → likely 401 / deployment issue
+        throw new Error(
+          'ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (CORS/401 Error)\n\n' +
+          'วิธีแก้ไข:\n' +
+          '1. เปิด Apps Script Editor (Extensions > Apps Script)\n' +
+          '2. กด Run ฟังก์ชัน doGet เพื่อ Authorize สิทธิ์\n' +
+          '3. ไปที่ Deploy > Manage deployments\n' +
+          '4. กดไอคอนแก้ไข (ดินสอ) ที่ deployment\n' +
+          '5. Version → เลือก "New version"\n' +
+          '6. Who has access → เลือก "Anyone"\n' +
+          '7. กด Deploy แล้วคัดลอก URL ใหม่ไปใส่ในตั้งค่า'
+        );
       }
-      // Request sent but can't read response — caller should re-fetch to verify
+      // no-cors request sent — can't read response, re-fetch to verify
       return true;
     }
     throw error;
@@ -282,6 +292,30 @@ export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean>
       responsible: issue.responsible,
       editDate: issue.editDate,
     },
+  });
+
+  return postToAppsScript(sheet.appsScriptUrl, payload);
+}
+
+export async function updateGenericRow(
+  row: GenericRow,
+  allHeaders: string[],
+  headerRow: number
+): Promise<boolean> {
+  const sheet = getActiveSheet(getSettings());
+  if (!sheet?.appsScriptUrl) {
+    throw new Error('กรุณาตั้งค่า Google Apps Script URL ก่อน');
+  }
+
+  // สร้าง values array ตามลำดับ headers ของ sheet
+  const values: string[] = allHeaders.map(h => String(row[h] ?? ''));
+
+  const payload = JSON.stringify({
+    action: 'updateGeneric',
+    gid: sheet.gid,
+    rowIndex: row._rowIndex,
+    headerRow: headerRow,
+    values: values,
   });
 
   return postToAppsScript(sheet.appsScriptUrl, payload);

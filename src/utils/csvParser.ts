@@ -93,24 +93,53 @@ function parseCsvLines(csv: string): string[][] {
  * Parse CSV ทั่วไป — อ่าน header จากแถวแรกของข้อมูล แล้ว map แต่ละแถวเป็น object
  * headerRow: แถวที่เป็น header ใน sheet จริง (ใช้คำนวณ _rowIndex)
  */
-export function parseCSVGeneric(csvText: string, headerRow: number = 1): GenericSheetData {
+export function parseCSVGeneric(csvText: string, headerRow: number = 1, columnOverrides?: Record<number, string>): GenericSheetData {
   const lines = parseCsvLines(csvText);
   const headerIndex = headerRow - 1; // แปลง 1-based เป็น 0-based index
   if (lines.length <= headerIndex + 1) return { headers: [], rows: [] };
 
-  // อ่าน header จากแถวที่กำหนด (headerRow)
-  const rawHeaders = lines[headerIndex].map(h => h.trim()).filter(h => h !== '');
+  // อ่าน header จากแถวที่กำหนด — เก็บ index จริงไว้เพื่อ map ข้อมูลให้ตรงคอลัมน์
+  const allHeaders = lines[headerIndex].map(h => h.trim().replace(/[\r\n]+\s*/g, ' ').trim());
+  // ถ้า header cell ว่าง → ค้นหาขึ้นไปทุก row ก่อนหน้า (รองรับ merged cell ที่ span หลายแถว)
+  for (let c = 0; c < allHeaders.length; c++) {
+    if (allHeaders[c] === '') {
+      for (let r = headerIndex - 1; r >= 0; r--) {
+        const val = lines[r][c]?.trim();
+        if (val) {
+          allHeaders[c] = val;
+          break;
+        }
+      }
+    }
+  }
+  // ใช้ columnOverrides สำหรับคอลัมน์ที่ CSV อ่าน header ไม่ได้ (เช่น merged cell, checkbox)
+  if (columnOverrides) {
+    for (const [idx, name] of Object.entries(columnOverrides)) {
+      const colIdx = Number(idx);
+      if (colIdx < allHeaders.length && allHeaders[colIdx] === '') {
+        allHeaders[colIdx] = name;
+      }
+    }
+  }
+  // เก็บคู่ [originalIndex, headerName] เฉพาะ header ที่ไม่ว่าง
+  const headerMap: { idx: number; name: string }[] = [];
+  for (let c = 0; c < allHeaders.length; c++) {
+    if (allHeaders[c] !== '') {
+      headerMap.push({ idx: c, name: allHeaders[c] });
+    }
+  }
+  const rawHeaders = headerMap.map(h => h.name);
   const rows: GenericRow[] = [];
 
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const cols = lines[i];
     // ข้ามแถวที่ทุกคอลัมน์ว่าง
-    const hasData = cols.some((c, idx) => idx < rawHeaders.length && c.trim() !== '');
+    const hasData = headerMap.some(h => (cols[h.idx]?.trim() || '') !== '');
     if (!hasData) continue;
 
     const row: GenericRow = { _rowIndex: i + 1 }; // 1-based row ใน sheet จริง
-    for (let j = 0; j < rawHeaders.length; j++) {
-      row[rawHeaders[j]] = cols[j]?.trim() || '';
+    for (const h of headerMap) {
+      row[h.name] = cols[h.idx]?.trim() || '';
     }
     rows.push(row);
   }

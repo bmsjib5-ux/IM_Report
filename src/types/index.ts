@@ -36,8 +36,12 @@ export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
 export interface SheetTypeConfig {
   columns?: string[];       // คอลัมน์ที่จะแสดง (ถ้าไม่กำหนด = แสดงทั้งหมด)
   statusField?: string | string[];     // ชื่อคอลัมน์สถานะ — string = 1 คอลัมน์, array = หลายกลุ่ม
+  statusOptions?: string[];            // ตัวเลือกสถานะที่กำหนดไว้ล่วงหน้า (ใช้ใน dropdown แก้ไข)
   requiredField?: string | string[];   // ชื่อคอลัมน์ที่ต้องไม่ว่าง (กรองแถวว่างออก) — ถ้าเป็น array = OR (มีอย่างใดอย่างหนึ่งก็แสดง)
   headerRow?: number;       // override headerRow (ถ้ากำหนด จะใช้ค่านี้แทน sheet setting)
+  columnOverrides?: Record<number, string>; // กำหนดชื่อ header เอง (0-based col index → ชื่อ) — สำหรับ merged cell ที่ CSV อ่านไม่ได้
+  checkboxFields?: string[];  // คอลัมน์ที่เป็น checkbox (แสดง TRUE/FALSE เป็น ✓/✗)
+  dropdownOptions?: Record<string, string[]>;  // คอลัมน์ → ตัวเลือก dropdown (กำหนดเอง + รวมค่าจากข้อมูลจริง)
 }
 
 export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
@@ -55,9 +59,28 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'วันที่ดำเนินการ',
       'หมายเหตุ',
       'วันที่แก้ไข',
+      'BMS',
+      'วิธีพิมพ์',
+      'รายละเอียด',
+      'ผู้ตรวจสอบ BMS',
+      'ผลการตรวจสอบ',
     ],
     statusField: 'สถานะ',
+    statusOptions: [
+      'รอดำเนินการ',
+      'กำลังดำเนินการ',
+      'รอตรวจสอบ',
+      'ตรวจสอบแล้ว',
+      'ต้องแก้ไข',
+      'เจ้าหน้าที่ตรวจแล้ว',
+      'ดำเนินการแล้ว',
+      'แก้ไขแล้ว',
+      'ใช้แบบเดิม',
+    ],
     requiredField: ['ชื่อแบบฟอร์ม', 'รายชื่อในระบบ'],
+    columnOverrides: { 7: 'เช็คการปริ้น', 8: 'วันที่ดำเนินการ', 10: 'วันที่แก้ไข' },
+    checkboxFields: ['เช็คการปริ้น'],
+    dropdownOptions: { 'ผู้ตรวจสอบ BMS': ['อลงกรณ์', 'ศุภรัตน์', 'สุกรินทร์', 'ศราวุฒิ', 'สรวิชญ์', 'ภูมรินทร์', 'ชนาธิป', 'ศิรลักษณ์', 'ประพล'] },
   },
   assessment: {
     headerRow: 1,
@@ -73,7 +96,15 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'วันที่แก้ไข',
     ],
     statusField: 'สถานะ',
+    statusOptions: [
+      'รอดำเนินการ',
+      'กำลังดำเนินการ',
+      'ดำเนินการแล้ว',
+      'รอตรวจสอบ',
+      'ตรวจสอบแล้ว',
+    ],
     requiredField: 'ชื่อแบบฟอร์ม',
+    checkboxFields: ['พิมพ์เอกสาร'],
   },
   report: {
     headerRow: 1,
@@ -92,7 +123,7 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'ผู้ใช้งานตรวจสอบ',
       'วันที่แก้ไข',
     ],
-    statusField: ['เขียน Code', 'ผู้ใช้งานตรวจสอบ'],
+    statusField: ['ออกแบบ', 'เขียน Code', 'ผู้ใช้งานตรวจสอบ'],
     requiredField: ['ชื่อรายงานที่หน่วยงานเเจ้ง', 'ชื่อรายงานในระบบ'],
   },
 };
