@@ -2,13 +2,14 @@ import { useState } from 'react';
 import type { GenericRow } from '../types';
 
 interface GenericEditModalProps {
-  row: GenericRow;
+  row?: GenericRow;                     // ข้อมูลแถว (optional สำหรับ add mode)
   headers: string[];                    // header ทั้งหมดจาก sheet
   columns?: string[];                   // คอลัมน์ที่แสดง (จาก SHEET_TYPE_CONFIG)
   statusField?: string | string[];      // คอลัมน์สถานะ → ใช้ dropdown
   statusOptions?: string[];             // ตัวเลือกสถานะจากข้อมูลจริง
   checkboxFields?: string[];            // คอลัมน์ที่เป็น checkbox (TRUE/FALSE)
   dropdownOptions?: Record<string, string[]>;  // คอลัมน์ → ตัวเลือก dropdown (ดึงจากข้อมูลจริง)
+  mode?: 'edit' | 'add';               // โหมด: edit=แก้ไข, add=เพิ่มใหม่
   onClose: () => void;
   onSave: (updatedRow: GenericRow) => Promise<void>;
   saving: boolean;
@@ -24,7 +25,9 @@ function getFieldType(fieldName: string, statusFields: string[], cbFields: Set<s
   return 'text';
 }
 
-export default function GenericEditModal({ row, headers, columns, statusField, statusOptions = [], checkboxFields, dropdownOptions = {}, onClose, onSave, saving }: GenericEditModalProps) {
+export default function GenericEditModal({ row, headers, columns, statusField, statusOptions = [], checkboxFields, dropdownOptions = {}, mode = 'edit', onClose, onSave, saving }: GenericEditModalProps) {
+  const isAddMode = mode === 'add';
+
   // คอลัมน์ที่จะแสดงในฟอร์ม
   const editableFields = columns
     ? columns.filter(col => headers.includes(col))
@@ -38,11 +41,11 @@ export default function GenericEditModal({ row, headers, columns, statusField, s
   const cbFields = new Set(checkboxFields || []);
   const ddFields = new Set(Object.keys(dropdownOptions));
 
-  // Form state
+  // Form state — add mode เริ่มจากค่าว่าง, edit mode เริ่มจากค่าใน row
   const [form, setForm] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const h of editableFields) {
-      initial[h] = String(row[h] || '');
+      initial[h] = isAddMode ? '' : String(row?.[h] || '');
     }
     return initial;
   });
@@ -60,8 +63,8 @@ export default function GenericEditModal({ row, headers, columns, statusField, s
       const thaiYear = today.getFullYear() + 543;
       updatedForm['วันที่แก้ไข'] = `${today.getDate()}/${today.getMonth() + 1}/${thaiYear}`;
     }
-    // สร้าง updated row: copy ค่าเดิมทั้งหมด + ค่าที่แก้ไข
-    const updatedRow: GenericRow = { ...row };
+    // สร้าง updated row: add mode ใช้ _rowIndex=-1, edit mode copy ค่าเดิม
+    const updatedRow: GenericRow = isAddMode ? { _rowIndex: -1 } : { ...row! };
     for (const key of editableFields) {
       updatedRow[key] = updatedForm[key];
     }
@@ -70,7 +73,7 @@ export default function GenericEditModal({ row, headers, columns, statusField, s
 
   // หา label แสดง (ใช้คอลัมน์แรกที่มีค่า)
   const firstField = editableFields[0];
-  const subtitle = firstField ? String(row[firstField] || '') : '';
+  const subtitle = isAddMode ? '' : (firstField ? String(row?.[firstField] || '') : '');
 
   const inputClass = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none hover:border-gray-300 transition-colors";
   const labelClass = "block text-sm font-semibold text-gray-700 mb-1.5";
@@ -222,7 +225,7 @@ export default function GenericEditModal({ row, headers, columns, statusField, s
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 rounded-t-2xl"></div>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold text-gray-900">แก้ไขรายการ</h2>
+              <h2 className="text-lg font-bold text-gray-900">{isAddMode ? 'เพิ่มรายการใหม่' : 'แก้ไขรายการ'}</h2>
               {subtitle && <p className="text-sm text-gray-500 mt-0.5 truncate max-w-xs">{subtitle}</p>}
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
@@ -252,7 +255,7 @@ export default function GenericEditModal({ row, headers, columns, statusField, s
               {saving && (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               )}
-              บันทึก
+              {isAddMode ? 'เพิ่ม' : 'บันทึก'}
             </button>
           </div>
         </form>

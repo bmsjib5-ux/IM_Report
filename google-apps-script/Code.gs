@@ -103,6 +103,9 @@ function handleRequest(e) {
       case 'updateGeneric':
         output = updateGenericRow(params.rowIndex, params.values, gid, params.headerRow);
         break;
+      case 'addGeneric':
+        output = addGenericRow(params.values, gid, params.headerRow);
+        break;
       default:
         output = { success: false, error: 'Unknown action: ' + action };
     }
@@ -524,6 +527,119 @@ function updateGenericRow(rowIndex, values, gid, headerRow) {
       success: true,
       message: 'อัปเดต row ' + idx + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
       rowIndex: idx,
+      sheetName: sheet.getName()
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ========== Generic Sheet Add ==========
+
+/**
+ * เพิ่มแถวใหม่ใน sheet ทั่วไป (form, report, assessment)
+ * รับ values เป็น array ตามลำดับคอลัมน์
+ *
+ * @param {Array} values - ค่าที่จะเขียน ตามลำดับคอลัมน์
+ * @param {string} gid - Sheet tab ID
+ * @param {number} headerRow - แถวที่เป็น header (default=1)
+ */
+function addGenericRow(values, gid, headerRow) {
+  // 1. ตรวจสอบ parameter
+  if (!values || !Array.isArray(values)) {
+    return { success: false, error: 'กรุณาระบุ values เป็น array' };
+  }
+  if (!headerRow || headerRow < 1) {
+    headerRow = 1;
+  }
+
+  // 2. LockService
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return { success: false, error: 'มีผู้ใช้อื่นกำลังบันทึกอยู่ กรุณาลองใหม่อีกครั้ง' };
+  }
+
+  try {
+    // 3. หา sheet
+    var result = getSheetByGid(gid);
+    if (!result.success) return result;
+    var sheet = result.sheet;
+
+    // 4. อ่าน header row เพื่อนับจำนวนคอลัมน์จริง
+    var lastCol = sheet.getLastColumn();
+    var headerValues = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    var numCols = 0;
+    for (var i = 0; i < headerValues.length; i++) {
+      if (String(headerValues[i]).trim() !== '') numCols = i + 1;
+    }
+    if (numCols === 0) {
+      return { success: false, error: 'ไม่พบ header ในแถวที่ ' + headerRow };
+    }
+
+    // 5. หาแถวว่างถัดไป (batch read เหมือน addRow)
+    var lastRow = sheet.getLastRow();
+    var newRow = lastRow + 1;
+
+    if (lastRow > headerRow) {
+      var dataRows = lastRow - headerRow;
+      var allData = sheet.getRange(headerRow + 1, 1, dataRows, numCols).getValues();
+
+      // หาแถวสุดท้ายที่มีข้อมูลอยู่จริง
+      var lastFilledRow = headerRow;
+      for (var r = 0; r < allData.length; r++) {
+        var hasData = allData[r].some(function(cell) {
+          return cell !== '' && cell !== null && cell !== undefined;
+        });
+        if (hasData) {
+          lastFilledRow = headerRow + 1 + r;
+        }
+      }
+
+      newRow = lastFilledRow + 1;
+
+      // ตรวจสอบว่าแถวนั้นว่างจริง
+      while (newRow <= lastRow) {
+        var rowData = allData[newRow - headerRow - 1];
+        if (rowData) {
+          var isRowEmpty = rowData.every(function(cell) {
+            return cell === '' || cell === null || cell === undefined;
+          });
+          if (isRowEmpty) break;
+        } else {
+          break;
+        }
+        newRow++;
+      }
+    }
+
+    // 6. Sanitize + pad/trim ให้ตรงจำนวนคอลัมน์
+    //    ตรวจสอบ type จากแถวข้อมูลที่มีอยู่ (เช่น checkbox → boolean)
+    var existingTypes = [];
+    if (lastRow > headerRow) {
+      var sampleRow = sheet.getRange(headerRow + 1, 1, 1, numCols).getValues()[0];
+      existingTypes = sampleRow;
+    }
+
+    var sanitized = [];
+    for (var j = 0; j < numCols; j++) {
+      var rawVal = j < values.length ? values[j] : '';
+      if (existingTypes.length > 0 && typeof existingTypes[j] === 'boolean') {
+        sanitized.push(String(rawVal).toUpperCase() === 'TRUE');
+      } else {
+        sanitized.push(sanitizeString(rawVal));
+      }
+    }
+
+    // 7. เขียนข้อมูล
+    sheet.getRange(newRow, 1, 1, numCols).setValues([sanitized]);
+    SpreadsheetApp.flush();
+
+    return {
+      success: true,
+      message: 'เพิ่มรายการที่ row ' + newRow + ' สำเร็จ (sheet: ' + sheet.getName() + ')',
+      rowIndex: newRow,
       sheetName: sheet.getName()
     };
   } finally {

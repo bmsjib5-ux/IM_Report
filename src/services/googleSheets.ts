@@ -170,7 +170,7 @@ export async function fetchIssues(sheet?: SheetLink): Promise<Issue[]> {
     throw new Error('ไม่พบ Sheet ที่เลือก กรุณาตั้งค่าก่อน');
   }
 
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}`;
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}&_cb=${Date.now()}`;
 
   const response = await fetch(csvUrl);
   if (!response.ok) {
@@ -187,7 +187,7 @@ export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Rec
     throw new Error('ไม่พบ Sheet ที่เลือก กรุณาตั้งค่าก่อน');
   }
 
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}`;
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}&_cb=${Date.now()}`;
 
   const response = await fetch(csvUrl);
   if (!response.ok) {
@@ -214,7 +214,6 @@ async function postToAppsScript(url: string, payload: string): Promise<boolean> 
     return true;
   } catch (error) {
     // CORS error from Google Apps Script redirect (302 → googleusercontent.com)
-    // Common causes: 401 (wrong deployment) or missing CORS headers
     if (error instanceof TypeError) {
       // Retry with no-cors mode as fallback
       try {
@@ -237,7 +236,7 @@ async function postToAppsScript(url: string, payload: string): Promise<boolean> 
           '7. กด Deploy แล้วคัดลอก URL ใหม่ไปใส่ในตั้งค่า'
         );
       }
-      // no-cors request sent — can't read response, re-fetch to verify
+      // no-cors request sent — can't read response
       return true;
     }
     throw error;
@@ -292,6 +291,28 @@ export async function addIssue(issue: Omit<Issue, 'rowIndex'>): Promise<boolean>
       responsible: issue.responsible,
       editDate: issue.editDate,
     },
+  });
+
+  return postToAppsScript(sheet.appsScriptUrl, payload);
+}
+
+export async function addGenericRow(
+  row: Record<string, string>,
+  allHeaders: string[],
+  headerRow: number
+): Promise<boolean> {
+  const sheet = getActiveSheet(getSettings());
+  if (!sheet?.appsScriptUrl) {
+    throw new Error('กรุณาตั้งค่า Google Apps Script URL ก่อน');
+  }
+
+  const values: string[] = allHeaders.map(h => String(row[h] ?? ''));
+
+  const payload = JSON.stringify({
+    action: 'addGeneric',
+    gid: sheet.gid,
+    headerRow: headerRow,
+    values: values,
   });
 
   return postToAppsScript(sheet.appsScriptUrl, payload);

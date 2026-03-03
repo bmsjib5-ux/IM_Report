@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Issue, SortConfig, AppSettings, GenericSheetData, GenericRow } from '../types';
 import { SHEET_TYPE_CONFIG } from '../types';
-import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
+import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
 import { isSupabaseConfigured } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
@@ -49,6 +49,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
   const [editingGenericRow, setEditingGenericRow] = useState<GenericRow | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showGenericAddModal, setShowGenericAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getSettings());
@@ -241,6 +242,26 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         rows: prev.rows.map(r => r._rowIndex === updatedRow._rowIndex ? updatedRow : r),
       }));
       showToast('บันทึกสำเร็จ', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenericAddSave = async (newRow: GenericRow) => {
+    setSaving(true);
+    try {
+      const typeConfig = SHEET_TYPE_CONFIG[sheetType as keyof typeof SHEET_TYPE_CONFIG];
+      const headerRow = typeConfig?.headerRow || activeSheet?.headerRow || 1;
+      const rowData: Record<string, string> = {};
+      for (const h of genericData.headers) {
+        rowData[h] = String(newRow[h] ?? '');
+      }
+      await addGenericRow(rowData, genericData.headers, headerRow);
+      setShowGenericAddModal(false);
+      showToast('เพิ่มรายการสำเร็จ', 'success');
+      await loadData();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด', 'error');
     } finally {
@@ -613,7 +634,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         {isGenericSheet ? (
           /* Generic Sheet View */
           <>
-            {/* Refresh button + last updated */}
+            {/* Toolbar: Refresh + Add button + last updated */}
             <div className="flex items-center gap-2">
               <button
                 onClick={loadData}
@@ -625,6 +646,17 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 </svg>
                 รีเฟรช
               </button>
+              {activeSheet?.appsScriptUrl && (
+                <button
+                  onClick={() => setShowGenericAddModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-600 rounded-xl hover:from-indigo-700 hover:to-blue-700 shadow-sm shadow-indigo-500/25 transition-all"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  เพิ่มข้อมูลใหม่
+                </button>
+              )}
               {lastUpdated && (
                 <span className="inline-flex items-center gap-1.5 text-xs text-gray-400 font-medium">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -751,6 +783,42 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             dropdownOptions={ddOpts}
             onClose={() => setEditingGenericRow(null)}
             onSave={handleGenericEditSave}
+            saving={saving}
+          />
+        );
+      })()}
+
+      {showGenericAddModal && (() => {
+        const typeConfig = SHEET_TYPE_CONFIG[sheetType];
+        const sf = typeConfig?.statusField;
+        const configOpts = typeConfig?.statusOptions;
+        const sfArr = sf ? (Array.isArray(sf) ? sf : [sf]) : [];
+        const dataOpts = Array.from(new Set(
+          genericData.rows.flatMap(r => sfArr.map(f => String(r[f] || '').trim()).filter(Boolean))
+        ));
+        const opts = configOpts
+          ? [...configOpts, ...dataOpts.filter(o => !configOpts.includes(o))]
+          : dataOpts;
+        const ddOpts: Record<string, string[]> = {};
+        if (typeConfig?.dropdownOptions) {
+          for (const [field, configValues] of Object.entries(typeConfig.dropdownOptions)) {
+            const dataValues = Array.from(new Set(
+              genericData.rows.map(r => String(r[field] || '').trim()).filter(Boolean)
+            )).sort((a, b) => a.localeCompare(b, 'th'));
+            ddOpts[field] = [...configValues, ...dataValues.filter(v => !configValues.includes(v))];
+          }
+        }
+        return (
+          <GenericEditModal
+            headers={genericData.headers}
+            columns={SHEET_TYPE_CONFIG[sheetType]?.columns}
+            statusField={sf}
+            statusOptions={opts}
+            checkboxFields={typeConfig?.checkboxFields}
+            dropdownOptions={ddOpts}
+            mode="add"
+            onClose={() => setShowGenericAddModal(false)}
+            onSave={handleGenericAddSave}
             saving={saving}
           />
         );
