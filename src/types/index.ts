@@ -23,13 +23,14 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export type SheetType = 'issue' | 'form' | 'report' | 'assessment';
+export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training';
 
 export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'issue', label: 'ปัญหา' },
   { value: 'form', label: 'แบบฟอร์ม' },
   { value: 'report', label: 'รายงาน' },
   { value: 'assessment', label: 'Assessment' },
+  { value: 'training', label: 'อบรม' },
 ];
 
 // Config สำหรับแต่ละประเภท sheet
@@ -42,6 +43,9 @@ export interface SheetTypeConfig {
   columnOverrides?: Record<number, string>; // กำหนดชื่อ header เอง (0-based col index → ชื่อ) — สำหรับ merged cell ที่ CSV อ่านไม่ได้
   checkboxFields?: string[];  // คอลัมน์ที่เป็น checkbox (แสดง TRUE/FALSE เป็น ✓/✗)
   dropdownOptions?: Record<string, string[]>;  // คอลัมน์ → ตัวเลือก dropdown (กำหนดเอง + รวมค่าจากข้อมูลจริง)
+  sectionHeaderField?: string;  // คอลัมน์ที่ใช้ตรวจจับแถวหัวข้อ (merged row) — แถวที่มีเฉพาะคอลัมน์นี้มีค่า จะแสดง colSpan ทั้งแถว
+  noPagination?: boolean;       // แสดงข้อมูลทั้งหมดโดยไม่แบ่งหน้า
+  statusLabelTrim?: string[];   // คำนำหน้าที่ต้องตัดออกจาก label ใน summary cards
 }
 
 export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
@@ -105,6 +109,24 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     ],
     requiredField: 'ชื่อแบบฟอร์ม',
     checkboxFields: ['พิมพ์เอกสาร'],
+  },
+  training: {
+    headerRow: 1,
+    columns: [
+      'วัน/เวลา',
+      'ระบบงาน และผู้เกี่ยวข้อง',
+      'เนื้อหาเบื้องต้น',
+      'รอบ',
+      'ห้องอบรม',
+      'วิทยากร (BMS)',
+      'ผู้เข้าอบรม และผู้ที่เกี่ยวข้อง (จนท.รพ.)',
+    ],
+    statusField: 'ระบบงาน และผู้เกี่ยวข้อง',
+    requiredField: ['วัน/เวลา', 'ระบบงาน และผู้เกี่ยวข้อง'],
+    columnOverrides: { 0: 'วัน/เวลา' },
+    sectionHeaderField: 'วัน/เวลา',
+    noPagination: true,
+    statusLabelTrim: ['อบรมผู้ใช้งาน – ระบบงาน', 'อบรมผู้ใช้งาน – '],
   },
   report: {
     headerRow: 1,

@@ -674,6 +674,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               statusOptions={SHEET_TYPE_CONFIG[sheetType]?.statusOptions}
               requiredField={SHEET_TYPE_CONFIG[sheetType]?.requiredField}
               checkboxFields={SHEET_TYPE_CONFIG[sheetType]?.checkboxFields}
+              sectionHeaderField={SHEET_TYPE_CONFIG[sheetType]?.sectionHeaderField}
+              noPagination={SHEET_TYPE_CONFIG[sheetType]?.noPagination}
+              statusLabelTrim={SHEET_TYPE_CONFIG[sheetType]?.statusLabelTrim}
               onRowClick={activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
             />
           </>

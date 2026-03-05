@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { GenericSheetData, GenericRow } from '../types';
 
 interface GenericDataTableProps {
@@ -9,6 +9,9 @@ interface GenericDataTableProps {
   statusOptions?: string[];            // ตัวเลือกสถานะที่กำหนดไว้ล่วงหน้า (แสดง card ครบตามลำดับ)
   requiredField?: string | string[];   // ชื่อคอลัมน์ที่ต้องไม่ว่าง — string = ต้องมีค่า, array = OR (มีอย่างใดอย่างหนึ่ง)
   checkboxFields?: string[];           // คอลัมน์ที่เป็น checkbox (TRUE/FALSE → ✓/✗)
+  sectionHeaderField?: string;         // คอลัมน์ที่ใช้ตรวจจับแถวหัวข้อ (merged row)
+  noPagination?: boolean;              // แสดงทั้งหมดโดยไม่แบ่งหน้า
+  statusLabelTrim?: string[];          // คำนำหน้าที่ตัดออกจาก label ใน summary cards
   onRowClick?: (row: GenericRow) => void;  // คลิกแถวเพื่อแก้ไข
 }
 
@@ -35,8 +38,25 @@ const FALLBACK_STYLE = {
   cellBg: 'bg-gray-100', cellText: 'text-gray-600',
 };
 
+// ชุดสีหมุนวนสำหรับค่าที่ไม่มีใน STATUS_STYLE_MAP (เช่น ชื่อระบบงานอบรม)
+const AUTO_COLOR_PALETTE = [
+  { gradient: 'from-sky-400 to-cyan-500',     text: 'text-sky-700',     border: 'border-sky-200',     ring: 'ring-sky-300',     cellBg: 'bg-sky-50',     cellText: 'text-sky-700' },
+  { gradient: 'from-violet-400 to-purple-500', text: 'text-violet-700', border: 'border-violet-200', ring: 'ring-violet-300', cellBg: 'bg-violet-50', cellText: 'text-violet-700' },
+  { gradient: 'from-teal-400 to-emerald-500', text: 'text-teal-700',   border: 'border-teal-200',   ring: 'ring-teal-300',   cellBg: 'bg-teal-50',   cellText: 'text-teal-700' },
+  { gradient: 'from-rose-400 to-pink-500',    text: 'text-rose-700',   border: 'border-rose-200',   ring: 'ring-rose-300',   cellBg: 'bg-rose-50',   cellText: 'text-rose-700' },
+  { gradient: 'from-amber-400 to-orange-500', text: 'text-amber-700',  border: 'border-amber-200',  ring: 'ring-amber-300',  cellBg: 'bg-amber-50',  cellText: 'text-amber-700' },
+  { gradient: 'from-indigo-400 to-blue-500',  text: 'text-indigo-700', border: 'border-indigo-200', ring: 'ring-indigo-300', cellBg: 'bg-indigo-50', cellText: 'text-indigo-700' },
+  { gradient: 'from-lime-400 to-green-500',   text: 'text-lime-700',   border: 'border-lime-200',   ring: 'ring-lime-300',   cellBg: 'bg-lime-50',   cellText: 'text-lime-700' },
+  { gradient: 'from-fuchsia-400 to-pink-500', text: 'text-fuchsia-700',border: 'border-fuchsia-200',ring: 'ring-fuchsia-300',cellBg: 'bg-fuchsia-50',cellText: 'text-fuchsia-700' },
+];
+const autoColorCache = new Map<string, typeof FALLBACK_STYLE>();
+
 function getStatusStyle(status: string) {
-  return STATUS_STYLE_MAP[status] || FALLBACK_STYLE;
+  if (STATUS_STYLE_MAP[status]) return STATUS_STYLE_MAP[status];
+  if (autoColorCache.has(status)) return autoColorCache.get(status)!;
+  const color = AUTO_COLOR_PALETTE[autoColorCache.size % AUTO_COLOR_PALETTE.length];
+  autoColorCache.set(status, color);
+  return color;
 }
 
 // Render checkbox value (TRUE → green check, FALSE/empty → gray dash)
@@ -57,9 +77,30 @@ function renderCheckbox(val: string) {
   );
 }
 
-export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, onRowClick }: GenericDataTableProps) {
+export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, sectionHeaderField, noPagination, statusLabelTrim, onRowClick }: GenericDataTableProps) {
   const { rows: rawRows } = data;
   const cbFields = useMemo(() => new Set(checkboxFields || []), [checkboxFields]);
+
+  // ตัดคำนำหน้าออกจาก label (เช่น "อบรมผู้ใช้งาน – ระบบงาน" → เหลือชื่อระบบ)
+  const trimLabel = useCallback((label: string) => {
+    if (!statusLabelTrim) return label;
+    for (const prefix of statusLabelTrim) {
+      if (label.startsWith(prefix)) return label.slice(prefix.length).trim();
+    }
+    return label;
+  }, [statusLabelTrim]);
+
+  // ตรวจจับแถวหัวข้อ (section header) — แถวที่มีเฉพาะ sectionHeaderField มีค่า คอลัมน์อื่นว่างหมด
+  const isSectionHeader = useCallback((row: GenericRow) => {
+    if (!sectionHeaderField) return false;
+    const headerVal = String(row[sectionHeaderField] || '').trim();
+    if (!headerVal) return false;
+    // ตรวจว่าคอลัมน์อื่น (ที่แสดง) ว่างหมด
+    const displayHeaders = columns
+      ? columns.filter(col => data.headers.includes(col))
+      : data.headers;
+    return displayHeaders.every(h => h === sectionHeaderField || !String(row[h] || '').trim());
+  }, [sectionHeaderField, columns, data.headers]);
 
   // ถ้ามี columns prop ให้แสดงเฉพาะคอลัมน์ที่กำหนด (เฉพาะที่มีอยู่จริงใน data)
   const headers = columns
@@ -127,16 +168,53 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
   const filteredRows = useMemo(() => {
     let result = validRows;
 
-    // กรองตามสถานะ (field + value)
+    // กรองตามสถานะ (field + value) — คง section header rows ที่มี data rows ตามมา
     if (activeStatusField && activeStatusValue) {
-      result = result.filter(row => String(row[activeStatusField] || '').trim() === activeStatusValue);
+      if (sectionHeaderField) {
+        // กรองเฉพาะ data rows ก่อน แล้วหา section headers ที่เกี่ยวข้อง
+        const dataRows = result.filter(row => !isSectionHeader(row) && String(row[activeStatusField] || '').trim() === activeStatusValue);
+        const dataIndices = new Set(dataRows.map(r => r._rowIndex));
+        // หา section header ที่อยู่ก่อนหน้า data row (เป็น "พ่อ" ของ data row)
+        const relevantHeaders = new Set<number>();
+        for (const row of dataRows) {
+          // หา section header ที่อยู่ก่อนหน้า row นี้ (rowIndex น้อยกว่า)
+          let closestHeader: GenericRow | null = null;
+          for (const vr of validRows) {
+            if (vr._rowIndex >= row._rowIndex) break;
+            if (isSectionHeader(vr)) closestHeader = vr;
+          }
+          if (closestHeader) relevantHeaders.add(closestHeader._rowIndex);
+        }
+        result = validRows.filter(row =>
+          dataIndices.has(row._rowIndex) || relevantHeaders.has(row._rowIndex)
+        );
+      } else {
+        result = result.filter(row => String(row[activeStatusField] || '').trim() === activeStatusValue);
+      }
     }
 
     if (searchText) {
       const search = searchText.toLowerCase();
-      result = result.filter(row =>
-        headers.some(h => String(row[h] || '').toLowerCase().includes(search))
-      );
+      if (sectionHeaderField) {
+        const dataRows = result.filter(row => !isSectionHeader(row) && headers.some(h => String(row[h] || '').toLowerCase().includes(search)));
+        const dataIndices = new Set(dataRows.map(r => r._rowIndex));
+        const relevantHeaders = new Set<number>();
+        for (const row of dataRows) {
+          let closestHeader: GenericRow | null = null;
+          for (const vr of result) {
+            if (vr._rowIndex >= row._rowIndex) break;
+            if (isSectionHeader(vr)) closestHeader = vr;
+          }
+          if (closestHeader) relevantHeaders.add(closestHeader._rowIndex);
+        }
+        result = result.filter(row =>
+          dataIndices.has(row._rowIndex) || relevantHeaders.has(row._rowIndex)
+        );
+      } else {
+        result = result.filter(row =>
+          headers.some(h => String(row[h] || '').toLowerCase().includes(search))
+        );
+      }
     }
     if (sortCol && sortDir) {
       result = [...result].sort((a, b) => {
@@ -147,11 +225,11 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
       });
     }
     return result;
-  }, [validRows, headers, searchText, sortCol, sortDir, activeStatusField, activeStatusValue]);
+  }, [validRows, headers, searchText, sortCol, sortDir, activeStatusField, activeStatusValue, sectionHeaderField, isSectionHeader]);
 
-  const totalPages = Math.ceil(filteredRows.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + pageSize);
+  const totalPages = noPagination ? 1 : Math.ceil(filteredRows.length / pageSize);
+  const startIndex = noPagination ? 0 : (currentPage - 1) * pageSize;
+  const paginatedRows = noPagination ? filteredRows : filteredRows.slice(startIndex, startIndex + pageSize);
 
   const handleSort = (col: string) => {
     if (sortCol === col) {
@@ -199,7 +277,15 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
   };
 
   // Mobile card view
-  const renderMobileCard = (row: GenericRow, idx: number) => (
+  const renderMobileCard = (row: GenericRow, idx: number) => {
+    if (isSectionHeader(row)) {
+      return (
+        <div key={row._rowIndex || idx} className="rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 px-3.5 py-2.5">
+          <span className="font-bold text-orange-800 text-sm">{String(row[sectionHeaderField!] || '')}</span>
+        </div>
+      );
+    }
+    return (
     <div
       key={row._rowIndex || idx}
       onClick={() => onRowClick?.(row)}
@@ -230,7 +316,8 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
         <p className="text-xs text-gray-400 mt-1">+{headers.length - 6} คอลัมน์</p>
       )}
     </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -312,7 +399,7 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className={`text-xs font-medium leading-tight ${isActive ? style.text : 'text-gray-500'}`}>{status}</p>
+                          <p className={`text-xs font-medium leading-tight ${isActive ? style.text : 'text-gray-500'}`}>{trimLabel(status)}</p>
                           <p className="text-xl font-bold text-gray-900 mt-0.5">{count}</p>
                         </div>
                         <div className={`bg-gradient-to-br ${style.gradient} text-white rounded-lg p-1.5 shadow-sm`}>
@@ -411,36 +498,49 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                   </td>
                 </tr>
               ) : (
-                paginatedRows.map((row, idx) => (
-                  <tr
-                    key={row._rowIndex || idx}
-                    onClick={() => onRowClick?.(row)}
-                    className={`hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40 ${onRowClick ? 'cursor-pointer' : ''}`}
-                  >
-                    <td className="px-2 py-1.5 text-center text-gray-400 text-xs">{startIndex + idx + 1}</td>
-                    {headers.map(h => {
-                      const val = String(row[h] || '');
-                      const isStatus = statusFields.includes(h) && val;
-                      const isCheckbox = cbFields.has(h);
-                      const statusStyle = isStatus ? STATUS_STYLE_MAP[val] : null;
-                      return (
-                        <td key={h} className="px-2 py-1.5">
-                          {isCheckbox ? (
-                            renderCheckbox(val)
-                          ) : isStatus && statusStyle ? (
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyle.cellBg} ${statusStyle.cellText}`}>
-                              {val}
-                            </span>
-                          ) : (
-                            <div className="text-gray-700" title={val}>
-                              {val}
-                            </div>
-                          )}
+                paginatedRows.map((row, idx) => {
+                  if (isSectionHeader(row)) {
+                    return (
+                      <tr key={row._rowIndex || idx} className="bg-gradient-to-r from-orange-50 to-amber-50 border-y border-orange-200">
+                        <td colSpan={headers.length + 1} className="px-3 py-2">
+                          <span className="font-bold text-orange-800 text-sm">
+                            {String(row[sectionHeaderField!] || '')}
+                          </span>
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr
+                      key={row._rowIndex || idx}
+                      onClick={() => onRowClick?.(row)}
+                      className={`hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40 ${onRowClick ? 'cursor-pointer' : ''}`}
+                    >
+                      <td className="px-2 py-1.5 text-center text-gray-400 text-xs">{startIndex + idx + 1}</td>
+                      {headers.map(h => {
+                        const val = String(row[h] || '');
+                        const isStatus = statusFields.includes(h) && val;
+                        const isCheckbox = cbFields.has(h);
+                        const statusStyle = isStatus ? STATUS_STYLE_MAP[val] : null;
+                        return (
+                          <td key={h} className="px-2 py-1.5">
+                            {isCheckbox ? (
+                              renderCheckbox(val)
+                            ) : isStatus && statusStyle ? (
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyle.cellBg} ${statusStyle.cellText}`}>
+                                {val}
+                              </span>
+                            ) : (
+                              <div className="text-gray-700" title={val}>
+                                {val}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

@@ -113,10 +113,19 @@ export function parseCSVGeneric(csvText: string, headerRow: number = 1, columnOv
     }
   }
   // ใช้ columnOverrides สำหรับคอลัมน์ที่ CSV อ่าน header ไม่ได้ (เช่น merged cell, checkbox)
+  // เก็บข้อความส่วนท้ายของ header เดิม (สำหรับสร้าง section header row แรก)
+  let firstSectionText = '';
   if (columnOverrides) {
     for (const [idx, name] of Object.entries(columnOverrides)) {
       const colIdx = Number(idx);
-      if (colIdx < allHeaders.length && allHeaders[colIdx] === '') {
+      if (colIdx < allHeaders.length) {
+        // ตรวจว่า header เดิมมีข้อความหลังชื่อ override (เช่น "...วัน/เวลา วันจันทร์ ที่ 30 มีนาคม 2569")
+        const original = allHeaders[colIdx];
+        const overridePos = original.lastIndexOf(name);
+        if (overridePos >= 0) {
+          const after = original.substring(overridePos + name.length).trim();
+          if (after) firstSectionText = after;
+        }
         allHeaders[colIdx] = name;
       }
     }
@@ -130,6 +139,17 @@ export function parseCSVGeneric(csvText: string, headerRow: number = 1, columnOv
   }
   const rawHeaders = headerMap.map(h => h.name);
   const rows: GenericRow[] = [];
+
+  // ถ้ามีข้อความ section header แรก (ดึงจาก header เดิม) ให้แทรกเป็นแถวแรก
+  if (firstSectionText && columnOverrides) {
+    const sectionRow: GenericRow = { _rowIndex: 0 };
+    for (const h of headerMap) {
+      // ใส่ข้อความ section header ในคอลัมน์ที่ถูก override
+      const overriddenCols = new Set(Object.values(columnOverrides));
+      sectionRow[h.name] = overriddenCols.has(h.name) ? firstSectionText : '';
+    }
+    rows.push(sectionRow);
+  }
 
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const cols = lines[i];
