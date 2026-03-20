@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -11,9 +11,16 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false, // อนุญาต fetch ข้ามโดเมน (Google Sheets htmlview)
     },
     autoHideMenuBar: true,
     title: 'IM Report Dashboard',
+  });
+
+  // เปิด link ภายนอกในเบราว์เซอร์แทน Electron
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   // In production, load the built files

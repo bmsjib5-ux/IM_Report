@@ -47,6 +47,7 @@ export interface SheetTypeConfig {
   sectionHeaderField?: string;  // คอลัมน์ที่ใช้ตรวจจับแถวหัวข้อ (merged row) — แถวที่มีเฉพาะคอลัมน์นี้มีค่า จะแสดง colSpan ทั้งแถว
   noPagination?: boolean;       // แสดงข้อมูลทั้งหมดโดยไม่แบ่งหน้า
   statusLabelTrim?: string[];   // คำนำหน้าที่ต้องตัดออกจาก label ใน summary cards
+  mergeColumns?: string[];      // คอลัมน์ที่ต้องการ merge แนวตั้ง (rowSpan) — ค่าว่างจะรวมกับแถวก่อนหน้า
 }
 
 export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
@@ -115,19 +116,22 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     headerRow: 1,
     columns: [
       'วัน/เวลา',
-      'ระบบงาน และผู้เกี่ยวข้อง',
-      'เนื้อหาเบื้องต้น',
-      'รอบ',
-      'ห้องอบรม',
-      'วิทยากร (BMS)',
-      'ผู้เข้าอบรม และผู้ที่เกี่ยวข้อง (จนท.รพ.)',
+      'เวลา',
+      'รอบอบรม',
+      'ลงทะเบียน',
+      'จำนวน',
+      'ผู้รับผิดชอบ',
+      'สถานะ',
+      'หมายเหตุ',
     ],
-    statusField: 'ระบบงาน และผู้เกี่ยวข้อง',
-    requiredField: ['วัน/เวลา', 'ระบบงาน และผู้เกี่ยวข้อง'],
-    columnOverrides: { 0: 'วัน/เวลา' },
-    sectionHeaderField: 'วัน/เวลา',
+    statusField: ['สถานะ', 'ลงทะเบียน'],
+    statusOptions: [
+      'ดำเนินการแล้ว',
+    ],
+    requiredField: ['เวลา', 'รอบอบรม'],
+    columnOverrides: { 0: 'วัน/เวลา', 1: 'เวลา', 7: 'หมายเหตุ' },
+    mergeColumns: ['วัน/เวลา'],
     noPagination: true,
-    statusLabelTrim: ['อบรมผู้ใช้งาน – ระบบงาน', 'อบรมผู้ใช้งาน – '],
   },
   basicdata: {
     headerRow: 1,
@@ -139,6 +143,10 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'สถานะการจัดทำ',
       'วันที่ดำเนินการ',
       'ผู้รับผิดชอบ BMS',
+      'ผู้รับผิดชอบ รพ.',
+      'เบอร์ติดต่อ',
+      'วันที่คุยข้อมูล',
+      'สถานะไฟล์ตอบ',
       'ย้ายข้อมูลไปอบรม',
     ],
     statusField: 'สถานะการจัดทำ',
@@ -148,9 +156,9 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'กำลังดำเนินการ',
       'ดำเนินการแล้ว',
     ],
-    requiredField: 'รายละเอียดงาน',
-    sectionHeaderField: 'ลำดับ',
+    requiredField: ['รายละเอียดงาน', 'เนื้อหาสำคัญที่ต้องจัดทำ'],
     noPagination: true,
+    mergeColumns: ['ลำดับ', 'หัวข้อย่อย', 'รายละเอียดงาน'],
   },
   report: {
     headerRow: 1,

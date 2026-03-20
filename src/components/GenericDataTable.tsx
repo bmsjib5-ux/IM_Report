@@ -12,6 +12,7 @@ interface GenericDataTableProps {
   sectionHeaderField?: string;         // คอลัมน์ที่ใช้ตรวจจับแถวหัวข้อ (merged row)
   noPagination?: boolean;              // แสดงทั้งหมดโดยไม่แบ่งหน้า
   statusLabelTrim?: string[];          // คำนำหน้าที่ตัดออกจาก label ใน summary cards
+  mergeColumns?: string[];             // คอลัมน์ที่ merge แนวตั้ง (rowSpan) — ค่าว่างรวมกับแถวก่อนหน้า
   onRowClick?: (row: GenericRow) => void;  // คลิกแถวเพื่อแก้ไข
 }
 
@@ -30,6 +31,9 @@ const STATUS_STYLE_MAP: Record<string, {
   'เจ้าหน้าที่ตรวจแล้ว': { gradient: 'from-teal-400 to-cyan-500', text: 'text-teal-700',   border: 'border-teal-200',   ring: 'ring-teal-300',   cellBg: 'bg-teal-50',  cellText: 'text-teal-700' },
   'แก้ไขแล้ว':       { gradient: 'from-green-400 to-emerald-500', text: 'text-green-700',  border: 'border-green-200',  ring: 'ring-green-300',  cellBg: 'bg-green-50', cellText: 'text-green-700' },
   'ใช้แบบเดิม':      { gradient: 'from-violet-400 to-purple-500', text: 'text-violet-700', border: 'border-violet-200', ring: 'ring-violet-300', cellBg: 'bg-violet-50',cellText: 'text-violet-700' },
+  'ยังไม่เต็ม':      { gradient: 'from-green-400 to-emerald-500', text: 'text-green-700', border: 'border-green-200', ring: 'ring-green-300', cellBg: 'bg-green-50', cellText: 'text-green-700' },
+  'เต็มแล้ว':        { gradient: 'from-red-400 to-rose-500',     text: 'text-red-700',   border: 'border-red-200',   ring: 'ring-red-300',   cellBg: 'bg-red-50',   cellText: 'text-red-700' },
+  'ตั้งต้น':          { gradient: 'from-cyan-400 to-sky-500',     text: 'text-cyan-700',  border: 'border-cyan-200',  ring: 'ring-cyan-300',  cellBg: 'bg-cyan-50',  cellText: 'text-cyan-700' },
 };
 
 // สีสำรอง (สำหรับสถานะที่ไม่ได้กำหนดไว้ — สีเทา)
@@ -77,7 +81,7 @@ function renderCheckbox(val: string) {
   );
 }
 
-export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, sectionHeaderField, noPagination, statusLabelTrim, onRowClick }: GenericDataTableProps) {
+export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, sectionHeaderField, noPagination, statusLabelTrim, mergeColumns, onRowClick }: GenericDataTableProps) {
   const { rows: rawRows } = data;
   const cbFields = useMemo(() => new Set(checkboxFields || []), [checkboxFields]);
 
@@ -230,6 +234,37 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
   const totalPages = noPagination ? 1 : Math.ceil(filteredRows.length / pageSize);
   const startIndex = noPagination ? 0 : (currentPage - 1) * pageSize;
   const paginatedRows = noPagination ? filteredRows : filteredRows.slice(startIndex, startIndex + pageSize);
+
+  // คำนวณ rowSpan สำหรับ mergeColumns — merge เซลล์ว่างกับแถวก่อนหน้า
+  const mergeSet = useMemo(() => new Set(mergeColumns || []), [mergeColumns]);
+  const mergeSpans = useMemo(() => {
+    if (!mergeColumns || mergeColumns.length === 0 || paginatedRows.length === 0) return null;
+    // สร้าง map: rowIdx → colName → { span: number, hidden: boolean }
+    const spans = new Map<number, Map<string, { span: number; hidden: boolean }>>();
+    for (const col of mergeColumns) {
+      let spanStart = 0;
+      for (let i = 0; i < paginatedRows.length; i++) {
+        const val = String(paginatedRows[i][col] || '').trim();
+        if (val !== '' || i === 0) {
+          spanStart = i;
+        }
+        if (!spans.has(i)) spans.set(i, new Map());
+        spans.get(i)!.set(col, { span: 0, hidden: i !== spanStart });
+      }
+      let currentStart = 0;
+      for (let i = 0; i < paginatedRows.length; i++) {
+        const val = String(paginatedRows[i][col] || '').trim();
+        if (val !== '' || i === 0) {
+          if (i > 0) {
+            spans.get(currentStart)!.get(col)!.span = i - currentStart;
+          }
+          currentStart = i;
+        }
+      }
+      spans.get(currentStart)!.get(col)!.span = paginatedRows.length - currentStart;
+    }
+    return spans;
+  }, [paginatedRows, mergeColumns]);
 
   const handleSort = (col: string) => {
     if (sortCol === col) {
@@ -518,6 +553,24 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                     >
                       <td className="px-2 py-1.5 text-center text-gray-400 text-xs">{startIndex + idx + 1}</td>
                       {headers.map(h => {
+                        // ตรวจ merge: ถ้าเซลล์ถูก hidden (รวมกับแถวก่อนหน้า) → ข้าม
+                        if (mergeSpans && mergeSet.has(h)) {
+                          const info = mergeSpans.get(idx)?.get(h);
+                          if (info?.hidden) return null;
+                          const val = String(row[h] || '');
+                          const isStatus = statusFields.includes(h) && val;
+                          const isCheckbox = cbFields.has(h);
+                          const statusStyle = isStatus ? STATUS_STYLE_MAP[val] : null;
+                          return (
+                            <td key={h} className="px-2 py-1.5 align-top border-b border-gray-200 bg-slate-50/60 font-medium" rowSpan={info?.span || 1}>
+                              {isCheckbox ? renderCheckbox(val) : isStatus && statusStyle ? (
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${statusStyle.cellBg} ${statusStyle.cellText}`}>{val}</span>
+                              ) : (
+                                <div className="text-gray-800" title={val}>{val}</div>
+                              )}
+                            </td>
+                          );
+                        }
                         const val = String(row[h] || '');
                         const isStatus = statusFields.includes(h) && val;
                         const isCheckbox = cbFields.has(h);

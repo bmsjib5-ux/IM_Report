@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Issue, SortConfig, AppSettings, GenericSheetData, GenericRow } from '../types';
 import { SHEET_TYPE_CONFIG } from '../types';
-import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet } from '../services/googleSheets';
+import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet, fetchSheetTabNames } from '../services/googleSheets';
 import { isSupabaseConfigured } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
@@ -69,6 +69,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   // Last updated timestamp
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Sheet tabs (สำหรับ training → link ไปแท็บรายชื่อ)
+  const [sheetTabs, setSheetTabs] = useState<{ name: string; gid: string }[]>([]);
+
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);
   const sheetType = activeSheet?.sheetType || 'issue';
@@ -78,6 +81,49 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  // Training row click → เปิดแท็บรายชื่อผู้เข้าอบรมใน Google Sheet
+  const trainingRowOccurrence = useMemo(() => {
+    // นับลำดับการปรากฏของแต่ละรอบอบรม (เพื่อ match กับ 1/n, 2/n)
+    const countMap = new Map<string, number>();
+    const rowMap = new Map<number, { topic: string; occurrence: number }>();
+    for (const row of genericData.rows) {
+      const topic = String(row['รอบอบรม'] || '').trim();
+      if (!topic || topic.startsWith('**')) continue;
+      const count = (countMap.get(topic) || 0) + 1;
+      countMap.set(topic, count);
+      rowMap.set(row._rowIndex, { topic, occurrence: count });
+    }
+    return rowMap;
+  }, [genericData.rows]);
+
+  const handleTrainingRowClick = useCallback((row: GenericRow) => {
+    if (!activeSheet || sheetTabs.length === 0) return;
+    const info = trainingRowOccurrence.get(row._rowIndex);
+    if (!info) return;
+
+    // Normalize: – (en dash) → -- (double hyphen), trim whitespace
+    const normalize = (s: string) => s.replace(/\s+/g, ' ').replace(/–/g, '--').replace(/—/g, '--').trim();
+    const topicNorm = normalize(info.topic);
+
+    // หาแท็บที่ชื่อขึ้นต้นด้วย topic (ไม่รวมส่วน n/m)
+    const matchingTabs = sheetTabs.filter(t => {
+      const tabNorm = normalize(t.name);
+      // ตัดส่วน n/m ท้ายออก
+      const base = tabNorm.replace(/\s+\d+\/\d+$/, '');
+      return base === topicNorm;
+    });
+
+    // เลือกแท็บที่ตรงกับ occurrence
+    let targetTab = matchingTabs.length === 1
+      ? matchingTabs[0]
+      : matchingTabs[info.occurrence - 1] || matchingTabs[0];
+
+    if (targetTab) {
+      const url = `https://docs.google.com/spreadsheets/d/${activeSheet.sheetId}/edit#gid=${targetTab.gid}`;
+      window.open(url, '_blank');
+    }
+  }, [activeSheet, sheetTabs, trainingRowOccurrence]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -96,6 +142,12 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         setGenericData(data);
         setIssues([]);
         setLastUpdated(new Date());
+        // โหลดแท็บสำหรับ training sheet (เพื่อ link ไปรายชื่อผู้เข้าอบรม)
+        if (sheet?.sheetType === 'training' && sheet.sheetId) {
+          fetchSheetTabNames(sheet.sheetId).then(setSheetTabs).catch(() => setSheetTabs([]));
+        } else {
+          setSheetTabs([]);
+        }
       } else {
         const data = await fetchIssues(sheet);
         setIssues(data);
@@ -677,7 +729,8 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               sectionHeaderField={SHEET_TYPE_CONFIG[sheetType]?.sectionHeaderField}
               noPagination={SHEET_TYPE_CONFIG[sheetType]?.noPagination}
               statusLabelTrim={SHEET_TYPE_CONFIG[sheetType]?.statusLabelTrim}
-              onRowClick={activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
+              mergeColumns={SHEET_TYPE_CONFIG[sheetType]?.mergeColumns}
+              onRowClick={sheetType === 'training' && sheetTabs.length > 0 ? handleTrainingRowClick : activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
             />
           </>
         ) : (

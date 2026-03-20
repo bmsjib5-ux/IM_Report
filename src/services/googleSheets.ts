@@ -199,6 +199,23 @@ export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Rec
   return parseCSVGeneric(csvText, headerRow, columnOverrides);
 }
 
+/**
+ * ดึงรายชื่อแท็บจาก Google Spreadsheet โดย parse จาก /htmlview
+ * ใช้ pattern: items.push({name: "SHEET_NAME", pageUrl: "...", gid: "GID"})
+ */
+export async function fetchSheetTabNames(sheetId: string): Promise<{ name: string; gid: string }[]> {
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/htmlview`;
+  const res = await fetch(url);
+  const html = await res.text();
+  const tabs: { name: string; gid: string }[] = [];
+  const regex = /items\.push\(\{name:\s*"([^"]*)",\s*pageUrl:\s*"[^"]*",\s*gid:\s*"(\d+)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    tabs.push({ name: match[1], gid: match[2] });
+  }
+  return tabs;
+}
+
 async function postToAppsScript(url: string, payload: string): Promise<boolean> {
   try {
     // Try normal fetch first to get server response
