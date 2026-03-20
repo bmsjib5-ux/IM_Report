@@ -23,7 +23,7 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training';
+export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training' | 'basicdata';
 
 export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'issue', label: 'ปัญหา' },
@@ -31,6 +31,7 @@ export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'report', label: 'รายงาน' },
   { value: 'assessment', label: 'Assessment' },
   { value: 'training', label: 'อบรม' },
+  { value: 'basicdata', label: 'ข้อมูลพื้นฐาน' },
 ];
 
 // Config สำหรับแต่ละประเภท sheet
@@ -127,6 +128,29 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     sectionHeaderField: 'วัน/เวลา',
     noPagination: true,
     statusLabelTrim: ['อบรมผู้ใช้งาน – ระบบงาน', 'อบรมผู้ใช้งาน – '],
+  },
+  basicdata: {
+    headerRow: 1,
+    columns: [
+      'ลำดับ',
+      'หัวข้อย่อย',
+      'รายละเอียดงาน',
+      'เนื้อหาสำคัญที่ต้องจัดทำ',
+      'สถานะการจัดทำ',
+      'วันที่ดำเนินการ',
+      'ผู้รับผิดชอบ BMS',
+      'ย้ายข้อมูลไปอบรม',
+    ],
+    statusField: 'สถานะการจัดทำ',
+    statusOptions: [
+      'รอดำเนินการ',
+      'ตั้งต้น',
+      'กำลังดำเนินการ',
+      'ดำเนินการแล้ว',
+    ],
+    requiredField: 'รายละเอียดงาน',
+    sectionHeaderField: 'ลำดับ',
+    noPagination: true,
   },
   report: {
     headerRow: 1,
