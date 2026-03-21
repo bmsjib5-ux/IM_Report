@@ -78,11 +78,15 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [urlInputValue, setUrlInputValue] = useState('');
   const [urlHeaderRow, setUrlHeaderRow] = useState(1);
 
-  // โหลด URL mapping จาก localStorage (เก็บ { url, headerRow })
-  const TRAINING_URLS_KEY = 'im-training-urls';
+  // โหลด URL mapping จาก localStorage แยกตามรหัสสถานพยาบาล (เก็บ { url, headerRow })
+  const getTrainingUrlsKey = useCallback(() => {
+    const hosp = getActiveHospital(settings);
+    const hospCode = hosp?.code || hosp?.id || 'default';
+    return `im-training-urls-${hospCode}`;
+  }, [settings]);
   const getTrainingUrls = useCallback((): Record<string, { url: string; headerRow: number }> => {
     try {
-      const raw = JSON.parse(localStorage.getItem(TRAINING_URLS_KEY) || '{}');
+      const raw = JSON.parse(localStorage.getItem(getTrainingUrlsKey()) || '{}');
       // รองรับ format เก่า (string) → แปลงเป็น object
       const result: Record<string, { url: string; headerRow: number }> = {};
       for (const [k, v] of Object.entries(raw)) {
@@ -91,17 +95,17 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       }
       return result;
     } catch { return {}; }
-  }, []);
+  }, [getTrainingUrlsKey]);
   const saveTrainingUrl = useCallback((key: string, url: string, headerRow: number) => {
     const urls = getTrainingUrls();
     urls[key] = { url, headerRow };
-    localStorage.setItem(TRAINING_URLS_KEY, JSON.stringify(urls));
-  }, [getTrainingUrls]);
+    localStorage.setItem(getTrainingUrlsKey(), JSON.stringify(urls));
+  }, [getTrainingUrls, getTrainingUrlsKey]);
   const removeTrainingUrl = useCallback((key: string) => {
     const urls = getTrainingUrls();
     delete urls[key];
-    localStorage.setItem(TRAINING_URLS_KEY, JSON.stringify(urls));
-  }, [getTrainingUrls]);
+    localStorage.setItem(getTrainingUrlsKey(), JSON.stringify(urls));
+  }, [getTrainingUrls, getTrainingUrlsKey]);
 
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);
