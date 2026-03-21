@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Issue, SortConfig, AppSettings, GenericSheetData, GenericRow } from '../types';
 import { SHEET_TYPE_CONFIG } from '../types';
 import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet, fetchSheetTabCSV } from '../services/googleSheets';
-import { isSupabaseConfigured } from '../services/supabase';
+import { isSupabaseConfigured, getSupabaseConfig, loadTrainingUrlsFromSupabase, saveTrainingUrlsToSupabase } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
 import { parseThaiDate } from '../utils/csvParser';
@@ -78,16 +78,16 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [urlInputValue, setUrlInputValue] = useState('');
   const [urlHeaderRow, setUrlHeaderRow] = useState(1);
 
-  // โหลด URL mapping จาก localStorage แยกตามรหัสสถานพยาบาล (เก็บ { url, headerRow })
-  const getTrainingUrlsKey = useCallback(() => {
+  // โหลด URL mapping จาก localStorage + Supabase แยกตามรหัสสถานพยาบาล
+  const getHospitalCode = useCallback(() => {
     const hosp = getActiveHospital(settings);
-    const hospCode = hosp?.code || hosp?.id || 'default';
-    return `im-training-urls-${hospCode}`;
+    return hosp?.code || hosp?.id || 'default';
   }, [settings]);
+  const getTrainingUrlsKey = useCallback(() => `im-training-urls-${getHospitalCode()}`, [getHospitalCode]);
+
   const getTrainingUrls = useCallback((): Record<string, { url: string; headerRow: number }> => {
     try {
       const raw = JSON.parse(localStorage.getItem(getTrainingUrlsKey()) || '{}');
-      // รองรับ format เก่า (string) → แปลงเป็น object
       const result: Record<string, { url: string; headerRow: number }> = {};
       for (const [k, v] of Object.entries(raw)) {
         if (typeof v === 'string') result[k] = { url: v, headerRow: 1 };
@@ -96,16 +96,40 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       return result;
     } catch { return {}; }
   }, [getTrainingUrlsKey]);
+
+  // บันทึก URL ลง localStorage + Supabase
   const saveTrainingUrl = useCallback((key: string, url: string, headerRow: number) => {
     const urls = getTrainingUrls();
     urls[key] = { url, headerRow };
     localStorage.setItem(getTrainingUrlsKey(), JSON.stringify(urls));
-  }, [getTrainingUrls, getTrainingUrlsKey]);
+    // Fire-and-forget Supabase sync
+    const config = getSupabaseConfig();
+    if (config) saveTrainingUrlsToSupabase(config, getHospitalCode(), urls).catch(() => {});
+  }, [getTrainingUrls, getTrainingUrlsKey, getHospitalCode]);
+
   const removeTrainingUrl = useCallback((key: string) => {
     const urls = getTrainingUrls();
     delete urls[key];
     localStorage.setItem(getTrainingUrlsKey(), JSON.stringify(urls));
-  }, [getTrainingUrls, getTrainingUrlsKey]);
+    const config = getSupabaseConfig();
+    if (config) saveTrainingUrlsToSupabase(config, getHospitalCode(), urls).catch(() => {});
+  }, [getTrainingUrls, getTrainingUrlsKey, getHospitalCode]);
+
+  // โหลด training URLs จาก Supabase เมื่อเปลี่ยน hospital (merge กับ localStorage)
+  useEffect(() => {
+    const config = getSupabaseConfig();
+    if (!config) return;
+    const hospCode = getHospitalCode();
+    loadTrainingUrlsFromSupabase(config, hospCode).then(remote => {
+      if (!remote) return;
+      const local = getTrainingUrls();
+      // Merge: remote + local (local wins on conflict)
+      const merged = { ...remote, ...local };
+      localStorage.setItem(getTrainingUrlsKey(), JSON.stringify(merged));
+      // Sync merged back to Supabase
+      saveTrainingUrlsToSupabase(config, hospCode, merged).catch(() => {});
+    }).catch(() => {});
+  }, [getHospitalCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);

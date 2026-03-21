@@ -134,6 +134,39 @@ export async function saveSettingsToSupabase(config: SupabaseConfig, settings: A
   }
 }
 
+// --- Training URLs CRUD (เก็บแยกตาม hospitalCode) ---
+
+type TrainingUrlMap = Record<string, { url: string; headerRow: number }>;
+
+export async function loadTrainingUrlsFromSupabase(config: SupabaseConfig, hospitalCode: string): Promise<TrainingUrlMap | null> {
+  try {
+    const rowId = `training-urls-${hospitalCode}`;
+    const url = `${config.url.replace(/\/$/, '')}/rest/v1/app_settings?id=eq.${rowId}&select=settings`;
+    const res = await fetch(url, { headers: buildHeaders(config.anonKey) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+    return data[0].settings as TrainingUrlMap;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveTrainingUrlsToSupabase(config: SupabaseConfig, hospitalCode: string, urls: TrainingUrlMap): Promise<boolean> {
+  try {
+    const rowId = `training-urls-${hospitalCode}`;
+    const url = `${config.url.replace(/\/$/, '')}/rest/v1/app_settings`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: buildHeaders(config.anonKey, { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ id: rowId, settings: urls }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * อัปโหลดแบบ merge: เพิ่มเฉพาะ hospital ที่ยังไม่มีใน cloud (ไม่ทับของเดิม)
  * คืน { ok, added, skipped } เพื่อแสดงผลให้ผู้ใช้
