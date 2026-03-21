@@ -133,3 +133,36 @@ export async function saveSettingsToSupabase(config: SupabaseConfig, settings: A
     return false;
   }
 }
+
+/**
+ * อัปโหลดแบบ merge: เพิ่มเฉพาะ hospital ที่ยังไม่มีใน cloud (ไม่ทับของเดิม)
+ * คืน { ok, added, skipped } เพื่อแสดงผลให้ผู้ใช้
+ */
+export async function mergeUploadToSupabase(
+  config: SupabaseConfig,
+  localSettings: AppSettings,
+): Promise<{ ok: boolean; added: number; skipped: number }> {
+  try {
+    // 1. ดึง settings ปัจจุบันจาก cloud
+    const remote = await loadSettingsFromSupabase(config);
+    const remoteHospitals = remote?.hospitals || [];
+
+    // 2. หา hospital ที่ยังไม่มีใน cloud (เทียบด้วย code)
+    const existingCodes = new Set(remoteHospitals.map(h => h.code));
+    const newHospitals = localSettings.hospitals.filter(h => !existingCodes.has(h.code));
+
+    // 3. รวม: ของเดิมใน cloud + ของใหม่จาก local
+    const mergedSettings: AppSettings = {
+      ...localSettings,
+      hospitals: [...remoteHospitals, ...newHospitals],
+      activeHospitalId: remote?.activeHospitalId || localSettings.activeHospitalId,
+      activeSheetId: remote?.activeSheetId || localSettings.activeSheetId,
+    };
+
+    // 4. บันทึกกลับ
+    const ok = await saveSettingsToSupabase(config, mergedSettings);
+    return { ok, added: newHospitals.length, skipped: localSettings.hospitals.length - newHospitals.length };
+  } catch {
+    return { ok: false, added: 0, skipped: 0 };
+  }
+}

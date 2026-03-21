@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { AppSettings, Hospital, SheetLink, SheetType } from '../types';
 import { generateId, SHEET_TYPE_OPTIONS } from '../types';
 import { extractSheetInfo } from '../utils/csvParser';
-import { getSupabaseConfig, saveSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, saveSettingsToSupabase, loadSettingsFromSupabase } from '../services/supabase';
+import { getSupabaseConfig, saveSupabaseConfig, clearSupabaseConfig, testSupabaseConnection, saveSettingsToSupabase, loadSettingsFromSupabase, mergeUploadToSupabase } from '../services/supabase';
 import type { ConnectionResult } from '../services/supabase';
 import { listUsers, addUser, updateUser, deleteUser } from '../services/auth';
 import type { UserInfo } from '../services/auth';
@@ -163,8 +163,12 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     if (!config) return;
     setSupabaseUploading(true);
     setSupabaseMessage('');
-    const ok = await saveSettingsToSupabase(config, form);
-    setSupabaseMessage(ok ? 'อัปโหลดการตั้งค่าสำเร็จ' : 'อัปโหลดล้มเหลว');
+    const result = await mergeUploadToSupabase(config, form);
+    if (result.ok) {
+      setSupabaseMessage(`อัปโหลดสำเร็จ — เพิ่มใหม่ ${result.added} รพ., ข้ามที่ซ้ำ ${result.skipped} รพ.`);
+    } else {
+      setSupabaseMessage('อัปโหลดล้มเหลว');
+    }
     setSupabaseUploading(false);
   };
 
@@ -175,8 +179,15 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     setSupabaseMessage('');
     const remote = await loadSettingsFromSupabase(config);
     if (remote) {
-      setForm(remote);
-      setSupabaseMessage('ดึงข้อมูลจาก Cloud สำเร็จ');
+      // Merge: เพิ่ม hospital จาก cloud ที่ยังไม่มีใน local (ไม่ทับของเดิม)
+      const localCodes = new Set(form.hospitals.map(h => h.code));
+      const newFromCloud = remote.hospitals.filter(h => !localCodes.has(h.code));
+      const merged: AppSettings = {
+        ...form,
+        hospitals: [...form.hospitals, ...newFromCloud],
+      };
+      setForm(merged);
+      setSupabaseMessage(`ดึงจาก Cloud สำเร็จ — เพิ่มใหม่ ${newFromCloud.length} รพ., ข้ามที่ซ้ำ ${remote.hospitals.length - newFromCloud.length} รพ.`);
     } else {
       setSupabaseMessage('ไม่พบข้อมูลบน Cloud หรือเกิดข้อผิดพลาด');
     }
