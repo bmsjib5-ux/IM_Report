@@ -23,7 +23,7 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training' | 'basicdata';
+export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training' | 'basicdata' | 'schedule';
 
 export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'issue', label: 'ปัญหา' },
@@ -32,6 +32,7 @@ export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'assessment', label: 'Assessment' },
   { value: 'training', label: 'อบรม' },
   { value: 'basicdata', label: 'ข้อมูลพื้นฐาน' },
+  { value: 'schedule', label: 'ตารางดำเนินงาน' },
 ];
 
 // Config สำหรับแต่ละประเภท sheet
@@ -48,6 +49,7 @@ export interface SheetTypeConfig {
   noPagination?: boolean;       // แสดงข้อมูลทั้งหมดโดยไม่แบ่งหน้า
   statusLabelTrim?: string[];   // คำนำหน้าที่ต้องตัดออกจาก label ใน summary cards
   mergeColumns?: string[];      // คอลัมน์ที่ต้องการ merge แนวตั้ง (rowSpan) — ค่าว่างจะรวมกับแถวก่อนหน้า
+  gvizHeaders?: number;         // จำนวนแถวที่ gviz จะรวมเป็น header (ส่งเป็น &headers=N ใน URL) — สำหรับ sheet ที่มี merged cells ซับซ้อน
 }
 
 export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
@@ -129,7 +131,7 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'ดำเนินการแล้ว',
     ],
     requiredField: ['เวลา', 'รอบอบรม'],
-    columnOverrides: { 0: 'วัน/เวลา', 1: 'เวลา', 7: 'หมายเหตุ' },
+    columnOverrides: { 0: 'วัน/เวลา', 1: 'เวลา', 4: 'จำนวน', 7: 'หมายเหตุ' },
     mergeColumns: ['วัน/เวลา'],
     noPagination: true,
   },
@@ -149,7 +151,7 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'สถานะไฟล์ตอบ',
       'ย้ายข้อมูลไปอบรม',
     ],
-    statusField: 'สถานะการจัดทำ',
+    statusField: ['สถานะการจัดทำ', 'สถานะไฟล์ตอบ'],
     statusOptions: [
       'รอดำเนินการ',
       'ตั้งต้น',
@@ -159,6 +161,14 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     requiredField: ['รายละเอียดงาน', 'เนื้อหาสำคัญที่ต้องจัดทำ'],
     noPagination: true,
     mergeColumns: ['ลำดับ', 'หัวข้อย่อย', 'รายละเอียดงาน'],
+  },
+  schedule: {
+    gvizHeaders: 10,
+    headerRow: 2,
+    columnOverrides: { 0: 'วันที่ / เวลา' },
+    sectionHeaderField: 'วันที่ / เวลา',
+    mergeColumns: ['วันที่ / เวลา'],
+    noPagination: true,
   },
   report: {
     headerRow: 1,

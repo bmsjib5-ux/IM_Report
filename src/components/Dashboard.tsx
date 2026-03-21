@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Issue, SortConfig, AppSettings, GenericSheetData, GenericRow } from '../types';
 import { SHEET_TYPE_CONFIG } from '../types';
-import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet, fetchSheetTabNames } from '../services/googleSheets';
+import { fetchIssues, fetchGenericSheet, updateIssue, addIssue, addGenericRow, updateGenericRow, getSettings, saveSettings, syncSettingsFromSupabase, getActiveHospital, getActiveSheet, fetchSheetTabCSV } from '../services/googleSheets';
 import { isSupabaseConfigured } from '../services/supabase';
 import { isAdmin } from '../services/auth';
 import type { UserSession } from '../services/auth';
@@ -69,8 +69,39 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   // Last updated timestamp
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Sheet tabs (สำหรับ training → link ไปแท็บรายชื่อ)
-  const [sheetTabs, setSheetTabs] = useState<{ name: string; gid: string }[]>([]);
+  // Participant modal (แสดงรายชื่อผู้เข้าอบรม)
+  const [participantModal, setParticipantModal] = useState<{ title: string; data: GenericSheetData; url: string; row: GenericRow } | null>(null);
+  const [participantLoading, setParticipantLoading] = useState(false);
+
+  // URL input modal สำหรับกำหนด link รายชื่อ
+  const [urlInputRow, setUrlInputRow] = useState<GenericRow | null>(null);
+  const [urlInputValue, setUrlInputValue] = useState('');
+  const [urlHeaderRow, setUrlHeaderRow] = useState(1);
+
+  // โหลด URL mapping จาก localStorage (เก็บ { url, headerRow })
+  const TRAINING_URLS_KEY = 'im-training-urls';
+  const getTrainingUrls = useCallback((): Record<string, { url: string; headerRow: number }> => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(TRAINING_URLS_KEY) || '{}');
+      // รองรับ format เก่า (string) → แปลงเป็น object
+      const result: Record<string, { url: string; headerRow: number }> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === 'string') result[k] = { url: v, headerRow: 1 };
+        else result[k] = v as { url: string; headerRow: number };
+      }
+      return result;
+    } catch { return {}; }
+  }, []);
+  const saveTrainingUrl = useCallback((key: string, url: string, headerRow: number) => {
+    const urls = getTrainingUrls();
+    urls[key] = { url, headerRow };
+    localStorage.setItem(TRAINING_URLS_KEY, JSON.stringify(urls));
+  }, [getTrainingUrls]);
+  const removeTrainingUrl = useCallback((key: string) => {
+    const urls = getTrainingUrls();
+    delete urls[key];
+    localStorage.setItem(TRAINING_URLS_KEY, JSON.stringify(urls));
+  }, [getTrainingUrls]);
 
   const activeHospital = useMemo(() => getActiveHospital(settings), [settings]);
   const activeSheet = useMemo(() => getActiveSheet(settings), [settings]);
@@ -82,48 +113,81 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Training row click → เปิดแท็บรายชื่อผู้เข้าอบรมใน Google Sheet
-  const trainingRowOccurrence = useMemo(() => {
-    // นับลำดับการปรากฏของแต่ละรอบอบรม (เพื่อ match กับ 1/n, 2/n)
-    const countMap = new Map<string, number>();
-    const rowMap = new Map<number, { topic: string; occurrence: number }>();
-    for (const row of genericData.rows) {
-      const topic = String(row['รอบอบรม'] || '').trim();
-      if (!topic || topic.startsWith('**')) continue;
-      const count = (countMap.get(topic) || 0) + 1;
-      countMap.set(topic, count);
-      rowMap.set(row._rowIndex, { topic, occurrence: count });
+  // สร้าง key สำหรับแต่ละแถวอบรม (ใช้ rowIndex)
+  const getRowKey = useCallback((row: GenericRow) => {
+    return `row_${row._rowIndex}`;
+  }, []);
+
+  // คลิกปุ่มดูรายชื่อ → ถ้ามี URL แล้วเปิด modal, ถ้ายังไม่มีเปิด dialog กำหนด URL
+  const handleTrainingRowClick = useCallback(async (row: GenericRow) => {
+    const key = getRowKey(row);
+    const urls = getTrainingUrls();
+    const saved = urls[key];
+
+    if (!saved) {
+      // ยังไม่มี URL → เปิด dialog ให้กำหนด
+      setUrlInputRow(row);
+      setUrlInputValue('');
+      setUrlHeaderRow(1);
+      return;
     }
-    return rowMap;
-  }, [genericData.rows]);
 
-  const handleTrainingRowClick = useCallback((row: GenericRow) => {
-    if (!activeSheet || sheetTabs.length === 0) return;
-    const info = trainingRowOccurrence.get(row._rowIndex);
-    if (!info) return;
-
-    // Normalize: – (en dash) → -- (double hyphen), trim whitespace
-    const normalize = (s: string) => s.replace(/\s+/g, ' ').replace(/–/g, '--').replace(/—/g, '--').trim();
-    const topicNorm = normalize(info.topic);
-
-    // หาแท็บที่ชื่อขึ้นต้นด้วย topic (ไม่รวมส่วน n/m)
-    const matchingTabs = sheetTabs.filter(t => {
-      const tabNorm = normalize(t.name);
-      // ตัดส่วน n/m ท้ายออก
-      const base = tabNorm.replace(/\s+\d+\/\d+$/, '');
-      return base === topicNorm;
-    });
-
-    // เลือกแท็บที่ตรงกับ occurrence
-    let targetTab = matchingTabs.length === 1
-      ? matchingTabs[0]
-      : matchingTabs[info.occurrence - 1] || matchingTabs[0];
-
-    if (targetTab) {
-      const url = `https://docs.google.com/spreadsheets/d/${activeSheet.sheetId}/edit#gid=${targetTab.gid}`;
-      window.open(url, '_blank');
+    // มี URL แล้ว → ดึงข้อมูลแสดง modal
+    setParticipantLoading(true);
+    try {
+      // แยก sheetId และ gid จาก URL
+      const sheetIdMatch = saved.url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch = saved.url.match(/gid=(\d+)/);
+      if (!sheetIdMatch) {
+        showToast('URL ไม่ถูกต้อง', 'error');
+        return;
+      }
+      const sheetId = sheetIdMatch[1];
+      const gid = gidMatch ? gidMatch[1] : '0';
+      const data = await fetchSheetTabCSV(sheetId, gid, saved.headerRow);
+      const topic = String(row['รอบอบรม'] || 'รายชื่อผู้เข้าอบรม').trim();
+      setParticipantModal({ title: topic, data, url: saved.url, row });
+    } catch {
+      showToast('ไม่สามารถดึงข้อมูลรายชื่อได้', 'error');
+    } finally {
+      setParticipantLoading(false);
     }
-  }, [activeSheet, sheetTabs, trainingRowOccurrence]);
+  }, [getRowKey, getTrainingUrls]);
+
+  // บันทึก URL จาก dialog แล้วเปิดข้อมูลทันที
+  const handleSaveTrainingUrl = useCallback(async () => {
+    if (!urlInputRow || !urlInputValue.trim()) return;
+    const url = urlInputValue.trim();
+    const hRow = urlHeaderRow;
+    const row = urlInputRow;
+
+    // บันทึกก่อน
+    const key = getRowKey(row);
+    saveTrainingUrl(key, url, hRow);
+    setUrlInputRow(null);
+    setUrlInputValue('');
+    setUrlHeaderRow(1);
+
+    // เปิดข้อมูลทันทีจาก URL ที่เพิ่งบันทึก
+    setParticipantLoading(true);
+    try {
+      const sheetIdMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const gidMatch = url.match(/gid=(\d+)/);
+      if (!sheetIdMatch) {
+        showToast('URL ไม่ถูกต้อง', 'error');
+        return;
+      }
+      const sheetId = sheetIdMatch[1];
+      const gid = gidMatch ? gidMatch[1] : '0';
+      const data = await fetchSheetTabCSV(sheetId, gid, hRow);
+      const topic = String(row['รอบอบรม'] || 'รายชื่อผู้เข้าอบรม').trim();
+      setParticipantModal({ title: topic, data, url, row });
+    } catch {
+      showToast('ไม่สามารถดึงข้อมูลรายชื่อได้', 'error');
+    } finally {
+      setParticipantLoading(false);
+    }
+  }, [urlInputRow, urlInputValue, urlHeaderRow, getRowKey, saveTrainingUrl]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -138,16 +202,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         const sheetOverride = typeConfig?.headerRow !== undefined
           ? { ...sheet!, headerRow: typeConfig.headerRow }
           : sheet;
-        const data = await fetchGenericSheet(sheetOverride, typeConfig?.columnOverrides);
+        const data = await fetchGenericSheet(sheetOverride, typeConfig?.columnOverrides, typeConfig?.gvizHeaders);
         setGenericData(data);
         setIssues([]);
         setLastUpdated(new Date());
-        // โหลดแท็บสำหรับ training sheet (เพื่อ link ไปรายชื่อผู้เข้าอบรม)
-        if (sheet?.sheetType === 'training' && sheet.sheetId) {
-          fetchSheetTabNames(sheet.sheetId).then(setSheetTabs).catch(() => setSheetTabs([]));
-        } else {
-          setSheetTabs([]);
-        }
       } else {
         const data = await fetchIssues(sheet);
         setIssues(data);
@@ -730,7 +788,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               noPagination={SHEET_TYPE_CONFIG[sheetType]?.noPagination}
               statusLabelTrim={SHEET_TYPE_CONFIG[sheetType]?.statusLabelTrim}
               mergeColumns={SHEET_TYPE_CONFIG[sheetType]?.mergeColumns}
-              onRowClick={sheetType === 'training' && sheetTabs.length > 0 ? handleTrainingRowClick : activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
+              onViewDetail={sheetType === 'training' ? handleTrainingRowClick : undefined}
+              viewDetailLabel="ดูรายชื่อ"
+              hasDetailUrl={sheetType === 'training' ? (row: GenericRow) => !!getTrainingUrls()[getRowKey(row)]?.url : undefined}
+              onRowClick={activeSheet?.appsScriptUrl ? setEditingGenericRow : undefined}
             />
           </>
         ) : (
@@ -899,6 +960,152 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
 
       {showGuide && (
         <SetupGuideModal onClose={() => setShowGuide(false)} />
+      )}
+
+      {/* URL Input Modal (กำหนด link รายชื่อ) */}
+      {urlInputRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setUrlInputRow(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-50 rounded-t-2xl">
+              <h2 className="text-lg font-bold text-gray-800">กำหนด Link รายชื่อผู้เข้าอบรม</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{String(urlInputRow['รอบอบรม'] || '')}</p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <label className="block text-sm font-medium text-gray-700">URL Google Sheet (แท็บรายชื่อ)</label>
+              <input
+                type="url"
+                value={urlInputValue}
+                onChange={e => setUrlInputValue(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none"
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter' && urlInputValue.trim()) handleSaveTrainingUrl(); }}
+              />
+              <p className="text-xs text-gray-400">วาง URL ของแท็บ Google Sheet ที่มีรายชื่อผู้เข้าอบรม</p>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">แถว Header:</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={urlHeaderRow}
+                  onChange={e => setUrlHeaderRow(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none"
+                />
+                <span className="text-xs text-gray-400">กำหนดว่าแถวที่เท่าไหร่เป็นหัวตาราง</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-3 border-t border-gray-100">
+              <button onClick={() => setUrlInputRow(null)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleSaveTrainingUrl}
+                disabled={!urlInputValue.trim()}
+                className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-lg disabled:opacity-50 transition-colors"
+              >
+                บันทึกและเปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Participant Modal (รายชื่อผู้เข้าอบรม) */}
+      {participantModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setParticipantModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-amber-50 rounded-t-2xl">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">{participantModal.title}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">รายชื่อผู้เข้าอบรม ({participantModal.data.rows.filter(r => participantModal.data.headers.slice(1).some(h => String(r[h] || '').trim() !== '')).length} รายการ)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    // เปิด dialog กำหนดใหม่ พร้อมค่าเดิม
+                    const savedData = getTrainingUrls()[getRowKey(participantModal.row)];
+                    removeTrainingUrl(getRowKey(participantModal.row));
+                    setParticipantModal(null);
+                    setUrlInputRow(participantModal.row);
+                    setUrlInputValue(participantModal.url);
+                    setUrlHeaderRow(savedData?.headerRow || 1);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  title="เปลี่ยน Link"
+                >
+                  เปลี่ยน Link
+                </button>
+                <button
+                  onClick={() => window.open(participantModal.url, '_blank')}
+                  className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
+                  title="เปิดใน Google Sheets"
+                >
+                  เปิดใน Google Sheets
+                </button>
+                <button onClick={() => setParticipantModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            </div>
+            {/* Table */}
+            <div className="overflow-auto flex-1 p-4">
+              {(() => {
+                const rawHeaders = participantModal.data.headers;
+                // ตัด header แรกที่ยาวเกิน → ใช้ "ลำดับ" ถ้ามีคำว่า "ลำดับ" หรือเป็นตัวเลข
+                const displayHeaders = rawHeaders.map((h, i) => {
+                  if (i === 0 && h.length > 20) {
+                    if (h.includes('ลำดับ')) return 'ลำดับ';
+                    return 'ลำดับ';
+                  }
+                  return h;
+                });
+                // กรองแถวว่าง (มีแค่คอลัมน์แรก ไม่มีข้อมูลอื่น)
+                const filteredRows = participantModal.data.rows.filter(row => {
+                  const otherCols = rawHeaders.slice(1);
+                  return otherCols.some(h => String(row[h] || '').trim() !== '');
+                });
+                return (
+                  <>
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 bg-gray-50 border-b-2 border-gray-200 sticky top-0">#</th>
+                          {displayHeaders.map((h, i) => (
+                            <th key={i} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 bg-gray-50 border-b-2 border-gray-200 sticky top-0">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredRows.map((row, idx) => (
+                          <tr key={idx} className="border-b border-gray-100 hover:bg-orange-50/40">
+                            <td className="px-3 py-1.5 text-gray-400 text-xs">{idx + 1}</td>
+                            {rawHeaders.map((h, i) => (
+                              <td key={i} className="px-3 py-1.5 text-gray-700">{String(row[h] || '')}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {filteredRows.length === 0 && (
+                      <div className="text-center py-8 text-gray-400">ไม่พบข้อมูลรายชื่อ</div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Participant Loading Overlay */}
+      {participantLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-lg px-6 py-4 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
+            <span className="text-gray-600 font-medium">กำลังโหลดรายชื่อผู้เข้าอบรม...</span>
+          </div>
+        </div>
       )}
 
       {/* Toast Notification */}

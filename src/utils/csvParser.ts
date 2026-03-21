@@ -119,12 +119,14 @@ export function parseCSVGeneric(csvText: string, headerRow: number = 1, columnOv
     for (const [idx, name] of Object.entries(columnOverrides)) {
       const colIdx = Number(idx);
       if (colIdx < allHeaders.length) {
-        // ตรวจว่า header เดิมมีข้อความหลังชื่อ override (เช่น "...วัน/เวลา วันจันทร์ ที่ 30 มีนาคม 2569")
-        const original = allHeaders[colIdx];
-        const overridePos = original.lastIndexOf(name);
-        if (overridePos >= 0) {
-          const after = original.substring(overridePos + name.length).trim();
-          if (after) firstSectionText = after;
+        // ดึงข้อความส่วนท้ายเฉพาะจากคอลัมน์แรก (0) เท่านั้น (สำหรับ section header วันที่)
+        if (colIdx === 0) {
+          const original = allHeaders[colIdx];
+          const overridePos = original.lastIndexOf(name);
+          if (overridePos >= 0) {
+            const after = original.substring(overridePos + name.length).trim();
+            if (after) firstSectionText = after;
+          }
         }
         allHeaders[colIdx] = name;
       }

@@ -14,6 +14,9 @@ interface GenericDataTableProps {
   statusLabelTrim?: string[];          // คำนำหน้าที่ตัดออกจาก label ใน summary cards
   mergeColumns?: string[];             // คอลัมน์ที่ merge แนวตั้ง (rowSpan) — ค่าว่างรวมกับแถวก่อนหน้า
   onRowClick?: (row: GenericRow) => void;  // คลิกแถวเพื่อแก้ไข
+  onViewDetail?: (row: GenericRow) => void;  // ปุ่มดูรายละเอียด (เช่น ดูรายชื่อผู้เข้าอบรม)
+  viewDetailLabel?: string;                  // ข้อความบนปุ่ม (default: "ดูรายชื่อ")
+  hasDetailUrl?: (row: GenericRow) => boolean;  // ตรวจว่าแถวนี้มี URL กำหนดไว้แล้วหรือยัง
 }
 
 // สีตามชื่อสถานะ (ใช้ทั้ง card + เซลล์ในตาราง)
@@ -81,7 +84,56 @@ function renderCheckbox(val: string) {
   );
 }
 
-export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, sectionHeaderField, noPagination, statusLabelTrim, mergeColumns, onRowClick }: GenericDataTableProps) {
+// แปลงเดือนไทยเป็นตัวเลข
+const THAI_MONTHS: Record<string, number> = {
+  'มกราคม': 0, 'กุมภาพันธ์': 1, 'มีนาคม': 2, 'เมษายน': 3,
+  'พฤษภาคม': 4, 'มิถุนายน': 5, 'กรกฎาคม': 6, 'สิงหาคม': 7,
+  'กันยายน': 8, 'ตุลาคม': 9, 'พฤศจิกายน': 10, 'ธันวาคม': 11,
+};
+
+// ดึงวันที่จากข้อความ section header เช่น "วันจันทร์ ที่ 16 มีนาคม พ.ศ. 2569" หรือ "วันที่ 22- 27 มีนาคม พ.ศ. 2569"
+function parseSectionDate(text: string): { start: Date; end: Date } | null {
+  // Pattern: "ที่ DD เดือน พ.ศ. YYYY" หรือ "ที่ DD เดือน YYYY"
+  const singleMatch = text.match(/ที่\s+(\d{1,2})\s+(\S+?)(?:\s+พ\.ศ\.?)?\s+(\d{4})/);
+  if (singleMatch) {
+    const day = parseInt(singleMatch[1]);
+    const month = THAI_MONTHS[singleMatch[2]];
+    const yearBE = parseInt(singleMatch[3]);
+    if (month !== undefined && !isNaN(yearBE)) {
+      const yearCE = yearBE > 2400 ? yearBE - 543 : yearBE;
+      const d = new Date(yearCE, month, day);
+      return { start: d, end: d };
+    }
+  }
+  // Pattern: "วันที่ DD- DD เดือน พ.ศ. YYYY" (date range)
+  const rangeMatch = text.match(/วันที่\s+(\d{1,2})\s*-\s*(\d{1,2})\s+(\S+?)(?:\s+พ\.ศ\.?)?\s+(\d{4})/);
+  if (rangeMatch) {
+    const dayStart = parseInt(rangeMatch[1]);
+    const dayEnd = parseInt(rangeMatch[2]);
+    const month = THAI_MONTHS[rangeMatch[3]];
+    const yearBE = parseInt(rangeMatch[4]);
+    if (month !== undefined && !isNaN(yearBE)) {
+      const yearCE = yearBE > 2400 ? yearBE - 543 : yearBE;
+      return { start: new Date(yearCE, month, dayStart), end: new Date(yearCE, month, dayEnd) };
+    }
+  }
+  return null;
+}
+
+// กำหนดสถานะวันที่: 'past' | 'current' | 'future'
+function getDateStatus(text: string): 'past' | 'current' | 'future' | null {
+  const parsed = parseSectionDate(text);
+  if (!parsed) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  parsed.start.setHours(0, 0, 0, 0);
+  parsed.end.setHours(0, 0, 0, 0);
+  if (parsed.end < today) return 'past';
+  if (parsed.start <= today && today <= parsed.end) return 'current';
+  return 'future';
+}
+
+export default function GenericDataTable({ data, loading, columns, statusField, statusOptions, requiredField, checkboxFields, sectionHeaderField, noPagination, statusLabelTrim, mergeColumns, onRowClick, onViewDetail, viewDetailLabel, hasDetailUrl }: GenericDataTableProps) {
   const { rows: rawRows } = data;
   const cbFields = useMemo(() => new Set(checkboxFields || []), [checkboxFields]);
 
@@ -522,34 +574,58 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                     </div>
                   </th>
                 ))}
+                {onViewDetail && (
+                  <th className="px-2 py-2.5 text-center text-xs font-semibold text-slate-600 tracking-wide w-24">
+                    {viewDetailLabel || 'ดูรายชื่อ'}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {paginatedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={headers.length + 1} className="px-2 py-12 text-center text-gray-400 text-sm">
+                  <td colSpan={headers.length + 1 + (onViewDetail ? 1 : 0)} className="px-2 py-12 text-center text-gray-400 text-sm">
                     <svg className="w-10 h-10 text-gray-200 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     ไม่พบข้อมูล
                   </td>
                 </tr>
               ) : (
-                paginatedRows.map((row, idx) => {
+                (() => {
+                  let currentDateStatus: 'past' | 'current' | 'future' | null = null;
+                  return paginatedRows.map((row, idx) => {
                   if (isSectionHeader(row)) {
+                    // อัปเดต dateStatus จาก section header ที่มีวันที่
+                    const ds = getDateStatus(String(row[sectionHeaderField!] || ''));
+                    if (ds) currentDateStatus = ds;
+                    const sectionText = String(row[sectionHeaderField!] || '');
+                    const dateStatus = getDateStatus(sectionText);
+                    // สีตามสถานะวันที่: past=เทา, current=เขียว, future/null=ส้ม(ปกติ)
+                    const sectionStyle = dateStatus === 'past'
+                      ? 'bg-gradient-to-r from-gray-100 to-gray-50 border-y border-gray-200'
+                      : dateStatus === 'current'
+                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-y border-green-300'
+                      : 'bg-gradient-to-r from-orange-50 to-amber-50 border-y border-orange-200';
+                    const textStyle = dateStatus === 'past'
+                      ? 'text-gray-400'
+                      : dateStatus === 'current'
+                      ? 'text-green-800'
+                      : 'text-orange-800';
                     return (
-                      <tr key={row._rowIndex || idx} className="bg-gradient-to-r from-orange-50 to-amber-50 border-y border-orange-200">
-                        <td colSpan={headers.length + 1} className="px-3 py-2">
-                          <span className="font-bold text-orange-800 text-sm">
-                            {String(row[sectionHeaderField!] || '')}
+                      <tr key={row._rowIndex || idx} className={sectionStyle}>
+                        <td colSpan={headers.length + 1 + (onViewDetail ? 1 : 0)} className="px-3 py-2">
+                          <span className={`font-bold text-sm ${textStyle}`}>
+                            {sectionText}
                           </span>
                         </td>
                       </tr>
                     );
                   }
+                  const rowPastClass = currentDateStatus === 'past' ? 'opacity-50' : '';
                   return (
                     <tr
                       key={row._rowIndex || idx}
                       onClick={() => onRowClick?.(row)}
-                      className={`hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40 ${onRowClick ? 'cursor-pointer' : ''}`}
+                      className={`hover:bg-indigo-50/60 transition-colors duration-150 even:bg-slate-50/40 ${onRowClick ? 'cursor-pointer' : ''} ${rowPastClass}`}
                     >
                       <td className="px-2 py-1.5 text-center text-gray-400 text-xs">{startIndex + idx + 1}</td>
                       {headers.map(h => {
@@ -591,9 +667,38 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                           </td>
                         );
                       })}
+                      {onViewDetail && (
+                        <td className="px-2 py-1.5 text-center">
+                          {hasDetailUrl?.(row) ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onViewDetail(row); }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors"
+                              title={viewDetailLabel || 'ดูรายชื่อ'}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              {viewDetailLabel || 'ดูรายชื่อ'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onViewDetail(row); }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
+                              title="กำหนด Link"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                              </svg>
+                              กำหนด Link
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
-                })
+                });
+                })()
               )}
             </tbody>
           </table>

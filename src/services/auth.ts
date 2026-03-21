@@ -109,7 +109,28 @@ export async function deleteUser(id: string): Promise<boolean> {
 
 // --- Login via Supabase RPC ---
 
+// Built-in admin account (ไม่ต้องผ่าน Supabase)
+const BUILTIN_ADMIN = {
+  username: 'Admin',
+  password: 'bms123456',
+  displayName: 'Administrator',
+  role: 'admin' as const,
+};
+
 export async function login(username: string, password: string): Promise<UserSession | null> {
+  // ตรวจ built-in admin ก่อน (case-insensitive username)
+  if (username.toLowerCase() === BUILTIN_ADMIN.username.toLowerCase() && password === BUILTIN_ADMIN.password) {
+    const session: UserSession = {
+      id: 'builtin-admin',
+      username: BUILTIN_ADMIN.username,
+      displayName: BUILTIN_ADMIN.displayName,
+      role: BUILTIN_ADMIN.role,
+    };
+    saveUserSession(session);
+    return session;
+  }
+
+  // Fallback: ตรวจผ่าน Supabase
   const config = getSupabaseConfig();
   if (!config) return null;
 

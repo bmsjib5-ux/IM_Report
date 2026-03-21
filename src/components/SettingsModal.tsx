@@ -282,6 +282,22 @@ export default function SettingsModal({ settings, onClose, onSave }: SettingsMod
     setNewScriptUrlError('');
   };
 
+  const handleMoveSheet = (hospitalId: string, sheetId: string, direction: 'up' | 'down') => {
+    setForm(prev => ({
+      ...prev,
+      hospitals: prev.hospitals.map(h => {
+        if (h.id !== hospitalId) return h;
+        const sheets = [...h.sheets];
+        const idx = sheets.findIndex(s => s.id === sheetId);
+        if (idx < 0) return h;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= sheets.length) return h;
+        [sheets[idx], sheets[newIdx]] = [sheets[newIdx], sheets[idx]];
+        return { ...h, sheets };
+      }),
+    }));
+  };
+
   const handleRemoveSheet = (hospitalId: string, sheetId: string) => {
     setForm(prev => ({
       ...prev,
@@ -1005,6 +1021,29 @@ CREATE POLICY "Allow anonymous update"
                                     <p className="text-xs text-gray-400 truncate mt-0.5">{sheet.sheetUrl}</p>
                                   </div>
                                   <div className="flex items-center gap-1 shrink-0">
+                                    {/* ปุ่มเลื่อนลำดับ */}
+                                    <div className="flex flex-col">
+                                      <button
+                                        onClick={() => handleMoveSheet(hosp.id, sheet.id, 'up')}
+                                        disabled={hosp.sheets.indexOf(sheet) === 0}
+                                        className="p-0.5 text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                                        title="เลื่อนขึ้น"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        onClick={() => handleMoveSheet(hosp.id, sheet.id, 'down')}
+                                        disabled={hosp.sheets.indexOf(sheet) === hosp.sheets.length - 1}
+                                        className="p-0.5 text-gray-300 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                                        title="เลื่อนลง"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                      </button>
+                                    </div>
                                     <button
                                       onClick={() => {
                                         setForm(prev => ({ ...prev, activeHospitalId: hosp.id, activeSheetId: sheet.id }));

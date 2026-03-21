@@ -181,13 +181,14 @@ export async function fetchIssues(sheet?: SheetLink): Promise<Issue[]> {
   return parseCSV(csvText);
 }
 
-export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Record<number, string>): Promise<GenericSheetData> {
+export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Record<number, string>, gvizHeaders?: number): Promise<GenericSheetData> {
   const target = sheet || getActiveSheet(getSettings());
   if (!target) {
     throw new Error('ไม่พบ Sheet ที่เลือก กรุณาตั้งค่าก่อน');
   }
 
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}&_cb=${Date.now()}`;
+  const headersParam = gvizHeaders ? `&headers=${gvizHeaders}` : '';
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${target.sheetId}/gviz/tq?tqx=out:csv&gid=${target.gid}${headersParam}&_cb=${Date.now()}`;
 
   const response = await fetch(csvUrl);
   if (!response.ok) {
@@ -200,20 +201,74 @@ export async function fetchGenericSheet(sheet?: SheetLink, columnOverrides?: Rec
 }
 
 /**
- * ดึงรายชื่อแท็บจาก Google Spreadsheet โดย parse จาก /htmlview
- * ใช้ pattern: items.push({name: "SHEET_NAME", pageUrl: "...", gid: "GID"})
+ * ดึงรายชื่อแท็บจาก Google Spreadsheet โดย parse จาก HTML
+ * ลองหลาย pattern เพื่อรองรับ format ต่างๆ ของ Google Sheets
  */
 export async function fetchSheetTabNames(sheetId: string): Promise<{ name: string; gid: string }[]> {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/htmlview`;
-  const res = await fetch(url);
-  const html = await res.text();
   const tabs: { name: string; gid: string }[] = [];
-  const regex = /items\.push\(\{name:\s*"([^"]*)",\s*pageUrl:\s*"[^"]*",\s*gid:\s*"(\d+)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(html)) !== null) {
-    tabs.push({ name: match[1], gid: match[2] });
+
+  // ลอง htmlview ก่อน
+  try {
+    const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/htmlview`);
+    const html = await res.text();
+
+    // Pattern 1: items.push({name: "...", pageUrl: "...", gid: "..."})
+    const regex1 = /items\.push\(\{name:\s*"([^"]*)",\s*pageUrl:\s*"[^"]*",\s*gid:\s*"(\d+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex1.exec(html)) !== null) {
+      tabs.push({ name: m[1], gid: m[2] });
+    }
+
+    // Pattern 2: id="sheet-button-NNNN" with sheet name nearby
+    if (tabs.length === 0) {
+      const regex2 = /id="sheet-button-(\d+)"[^>]*>([^<]+)</g;
+      while ((m = regex2.exec(html)) !== null) {
+        tabs.push({ name: m[2].trim(), gid: m[1] });
+      }
+    }
+
+    // Pattern 3: gid=NNNN in anchor with sheet name
+    if (tabs.length === 0) {
+      const regex3 = /gid=(\d+)[^"]*"[^>]*>([^<]+)</g;
+      while ((m = regex3.exec(html)) !== null) {
+        const name = m[2].trim();
+        if (name && !name.startsWith('<')) {
+          tabs.push({ name, gid: m[1] });
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Fallback: ลอง pubhtml
+  if (tabs.length === 0) {
+    try {
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/pubhtml`);
+      const html = await res.text();
+      const regex = /gid=(\d+)[^"]*"[^>]*>([^<]+)</g;
+      let m: RegExpExecArray | null;
+      while ((m = regex.exec(html)) !== null) {
+        const name = m[2].trim();
+        if (name && name.length > 0 && name.length < 200) {
+          tabs.push({ name, gid: m[1] });
+        }
+      }
+    } catch { /* ignore */ }
   }
+
   return tabs;
+}
+
+/**
+ * ดึงข้อมูล CSV จากแท็บเฉพาะ (gid) ของ Google Spreadsheet
+ */
+export async function fetchSheetTabCSV(sheetId: string, gid: string, headerRow: number = 1): Promise<GenericSheetData> {
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}&_cb=${Date.now()}`;
+  const response = await fetch(csvUrl);
+  if (!response.ok) {
+    throw new Error(`ไม่สามารถดึงข้อมูลแท็บได้: ${response.status}`);
+  }
+  const csvText = await response.text();
+  return parseCSVGeneric(csvText, headerRow);
 }
 
 async function postToAppsScript(url: string, payload: string): Promise<boolean> {
