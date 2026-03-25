@@ -10,8 +10,8 @@ const SETTINGS_ROW_ID = 'default';
 
 // --- Default Supabase config ---
 const DEFAULT_CONFIG: SupabaseConfig = {
-  url: 'https://vexpkzmlnbudsbtjmglk.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZleHBrem1sbmJ1ZHNidGptZ2xrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDE3NTAsImV4cCI6MjA4NzgxNzc1MH0.kTtwibpoKn8RIOQXmvt7-hHt3hAAnCkjEYsIvKjYdl4',
+  url: 'https://qzfmhsqrwqecbunrjmfc.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Zm1oc3Fyd3FlY2J1bnJqbWZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyMjA4MDQsImV4cCI6MjA3MDc5NjgwNH0.eUaUUNf8u9uCZDLN285oZ9cs20RjruCd_PxkjR6Fn_M',
 };
 
 // --- Config management (localStorage) ---
