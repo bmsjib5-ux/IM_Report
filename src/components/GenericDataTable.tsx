@@ -606,7 +606,7 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                       ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-y border-green-300'
                       : 'bg-gradient-to-r from-orange-50 to-amber-50 border-y border-orange-200';
                     const textStyle = dateStatus === 'past'
-                      ? 'text-gray-400'
+                      ? 'text-gray-400 line-through'
                       : dateStatus === 'current'
                       ? 'text-green-800'
                       : 'text-orange-800';
@@ -620,7 +620,7 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
                       </tr>
                     );
                   }
-                  const rowPastClass = currentDateStatus === 'past' ? 'opacity-50' : '';
+                  const rowPastClass = currentDateStatus === 'past' ? 'opacity-50 line-through' : '';
                   return (
                     <tr
                       key={row._rowIndex || idx}
