@@ -23,7 +23,7 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
-export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training' | 'basicdata' | 'schedule';
+export type SheetType = 'issue' | 'form' | 'report' | 'assessment' | 'training' | 'basicdata' | 'schedule' | 'survey';
 
 export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'issue', label: 'ปัญหา' },
@@ -33,6 +33,7 @@ export const SHEET_TYPE_OPTIONS: { value: SheetType; label: string }[] = [
   { value: 'training', label: 'อบรม' },
   { value: 'basicdata', label: 'ข้อมูลพื้นฐาน' },
   { value: 'schedule', label: 'ตารางดำเนินงาน' },
+  { value: 'survey', label: 'สำรวจเชื่อมต่อ' },
 ];
 
 // Config สำหรับแต่ละประเภท sheet
@@ -168,6 +169,22 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     columnOverrides: { 0: 'วันที่ / เวลา' },
     sectionHeaderField: 'วันที่ / เวลา',
     mergeColumns: ['วันที่ / เวลา'],
+    noPagination: true,
+  },
+  survey: {
+    headerRow: 1,
+    columns: [
+      'หน่วยงาน',
+      'เชื่อมต่อ',
+      'บริษัท',
+      'การเชื่อมต่อ HIS ปัจจุบัน',
+      'มีGateway',
+      'พัฒนาแล้ว',
+      'หมายเหตุ',
+    ],
+    columnOverrides: { 0: 'ลำดับ' },
+    statusField: 'การเชื่อมต่อ HIS ปัจจุบัน',
+    requiredField: 'หน่วยงาน',
     noPagination: true,
   },
   report: {
