@@ -164,8 +164,6 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
     mergeColumns: ['ลำดับ', 'หัวข้อย่อย', 'รายละเอียดงาน'],
   },
   schedule: {
-    gvizHeaders: 10,
-    headerRow: 2,
     columnOverrides: { 0: 'วันที่ / เวลา' },
     sectionHeaderField: 'วันที่ / เวลา',
     mergeColumns: ['วันที่ / เวลา'],
