@@ -18,6 +18,7 @@ interface SidebarProps {
   onHospitalChange: (id: string) => void;
   onSheetChange: (id: string) => void;
   onClose?: () => void;
+  darkMode?: boolean;
 }
 
 export default function Sidebar({
@@ -27,6 +28,7 @@ export default function Sidebar({
   onHospitalChange,
   onSheetChange,
   onClose,
+  darkMode,
 }: SidebarProps) {
   const activeHospital = hospitals.find(h => h.id === activeHospitalId);
 
@@ -36,14 +38,14 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="flex flex-col h-full bg-white border-r border-gray-200 w-52">
+    <aside className={`flex flex-col h-full w-52 border-r transition-colors duration-300 ${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-slate-50 border-gray-200'}`}>
       {/* Hospital selector */}
-      <div className="p-3 border-b border-gray-100">
-        <label className="block text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1.5">โรงพยาบาล</label>
+      <div className={`p-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <label className={`block text-[10px] uppercase tracking-wider font-semibold mb-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>โรงพยาบาล</label>
         <select
           value={activeHospitalId}
           onChange={e => onHospitalChange(e.target.value)}
-          className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 bg-white font-medium text-gray-700 truncate"
+          className={`w-full px-2.5 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 font-medium truncate ${darkMode ? 'border-gray-600 bg-gray-800 text-gray-200' : 'border-gray-200 bg-white text-gray-700'}`}
         >
           <option value="">-- เลือก รพ. --</option>
           {hospitals.map(h => (
@@ -56,7 +58,7 @@ export default function Sidebar({
 
       {/* Sheet list */}
       <div className="flex-1 overflow-y-auto py-2">
-        <p className="px-3 text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">รายการ Sheet</p>
+        <p className={`px-3 text-[10px] uppercase tracking-wider font-semibold mb-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>รายการ Sheet</p>
         {activeHospital && activeHospital.sheets.length > 0 ? (
           <nav className="space-y-0.5 px-2">
             {activeHospital.sheets.map(sheet => {
@@ -69,35 +71,39 @@ export default function Sidebar({
                   onClick={() => handleSheetClick(sheet.id)}
                   className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group flex items-start gap-2.5 ${
                     isActive
-                      ? 'bg-indigo-50 text-indigo-700 border-l-[3px] border-indigo-500 font-semibold shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-[3px] border-transparent'
+                      ? darkMode
+                        ? 'bg-indigo-600/20 text-indigo-300 border-l-[3px] border-indigo-400 font-semibold shadow-sm'
+                        : 'bg-indigo-50 text-indigo-700 border-l-[3px] border-indigo-500 font-semibold shadow-sm'
+                      : darkMode
+                        ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-200 border-l-[3px] border-transparent'
+                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 border-l-[3px] border-transparent'
                   }`}
                 >
                   {/* Sheet type icon */}
-                  <svg className={`w-4 h-4 mt-0.5 shrink-0 ${isActive ? typeInfo.color : 'text-gray-400 group-hover:text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-4 h-4 mt-0.5 shrink-0 ${isActive ? typeInfo.color : darkMode ? 'text-gray-500 group-hover:text-gray-400' : 'text-gray-400 group-hover:text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={typeInfo.icon} />
                   </svg>
                   <div className="min-w-0 flex-1">
                     <p className="truncate leading-tight">{sheet.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`text-[10px] ${isActive ? typeInfo.color : 'text-gray-400'}`}>
+                      <span className={`text-[10px] ${isActive ? typeInfo.color : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         {typeInfo.label}
                       </span>
-                      <span className={`text-[10px] ${isActive ? 'text-indigo-400' : 'text-gray-300'}`}>|</span>
-                      <span className={`text-[10px] ${isActive ? 'text-indigo-500' : 'text-gray-400'}`}>
+                      <span className={`text-[10px] ${isActive ? 'text-indigo-400' : darkMode ? 'text-gray-600' : 'text-gray-300'}`}>|</span>
+                      <span className={`text-[10px] ${isActive ? 'text-indigo-400' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
                         {hasScript ? 'อ่าน/เขียน' : 'อ่านอย่างเดียว'}
                       </span>
                     </div>
                   </div>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></span>
+                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${darkMode ? 'bg-indigo-400' : 'bg-indigo-500'}`}></span>
                   )}
                 </button>
               );
             })}
           </nav>
         ) : (
-          <p className="px-3 text-xs text-gray-400 italic">ไม่มี Sheet</p>
+          <p className={`px-3 text-xs italic ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>ไม่มี Sheet</p>
         )}
       </div>
     </aside>

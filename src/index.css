@@ -15,6 +15,12 @@ body {
   background: linear-gradient(135deg, #f0f4ff 0%, #f5f3ff 50%, #fdf2f8 100%);
   background-attachment: fixed;
   min-height: 100vh;
+  transition: background 0.3s ease;
+}
+
+body.dark-mode {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+  color: #e2e8f0;
 }
 
 /* Smooth scrollbar */
@@ -64,6 +70,17 @@ body {
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+body.dark-mode .glass {
+  background: rgba(30, 41, 59, 0.8);
+}
+
+/* Dark mode scrollbar */
+body.dark-mode ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* Smooth transitions for all interactive elements */

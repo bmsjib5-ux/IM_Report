@@ -24,6 +24,13 @@ interface DashboardProps {
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const canAdmin = isAdmin(user ?? null);
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('im-dark-mode') === 'true');
+  useEffect(() => {
+    document.body.classList.toggle('dark-mode', darkMode);
+    localStorage.setItem('im-dark-mode', String(darkMode));
+  }, [darkMode]);
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const [genericData, setGenericData] = useState<GenericSheetData>({ headers: [], rows: [] });
   const [loading, setLoading] = useState(true);
@@ -464,6 +471,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             activeSheetId={settings.activeSheetId}
             onHospitalChange={handleHospitalChange}
             onSheetChange={handleSheetChange}
+            darkMode={darkMode}
           />
         </div>
       </div>
@@ -479,6 +487,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               activeSheetId={settings.activeSheetId}
               onHospitalChange={handleHospitalChange}
               onSheetChange={(id) => { handleSheetChange(id); setSidebarOpen(false); }}
+              darkMode={darkMode}
               onClose={() => setSidebarOpen(false)}
             />
           </div>
@@ -541,6 +550,23 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                   Cloud
                 </span>
               )}
+
+              {/* Dark mode toggle */}
+              <button
+                onClick={() => setDarkMode(d => !d)}
+                className="p-2 text-white/80 hover:text-white hover:bg-white/15 rounded-lg transition-colors"
+                title={darkMode ? 'โหมดกลางวัน' : 'โหมดกลางคืน'}
+              >
+                {darkMode ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
 
               <button
                 onClick={() => setShowGuide(true)}
@@ -694,7 +720,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
       </header>
 
       {/* Main Content */}
-      <main className="w-full px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+      <main className={`w-full px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4 transition-colors duration-300 ${darkMode ? 'text-gray-200' : ''}`} style={{ animation: 'fadeIn 0.4s ease-out' }}>
         {/* Error Banner */}
         {error && (
           <div className="bg-gradient-to-r from-red-50 to-rose-50 border border-red-200/60 rounded-xl p-3.5 flex items-center gap-3 shadow-sm">
