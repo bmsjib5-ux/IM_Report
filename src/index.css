@@ -83,6 +83,11 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
 
+/* Dark mode: modal/popup ให้ตัวหนังสือเป็นสีดำเสมอ */
+body.dark-mode .fixed {
+  color: #1e293b;
+}
+
 /* Smooth transitions for all interactive elements */
 button, select, input, a {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
