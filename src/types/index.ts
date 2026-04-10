@@ -178,7 +178,7 @@ export const SHEET_TYPE_CONFIG: Partial<Record<SheetType, SheetTypeConfig>> = {
       'หมายเหตุ',
     ],
     columnOverrides: { 0: 'ลำดับ' },
-    statusField: 'การเชื่อมต่อ HIS ปัจจุบัน',
+    statusField: ['การเชื่อมต่อ HIS ปัจจุบัน', 'เชื่อมต่อ'],
     requiredField: 'หน่วยงาน',
     checkboxFields: ['มีGateway', 'พัฒนาแล้ว'],
     noPagination: true,

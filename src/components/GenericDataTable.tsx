@@ -37,6 +37,9 @@ const STATUS_STYLE_MAP: Record<string, {
   'ยังไม่เต็ม':      { gradient: 'from-green-400 to-emerald-500', text: 'text-green-700', border: 'border-green-200', ring: 'ring-green-300', cellBg: 'bg-green-50', cellText: 'text-green-700' },
   'เต็มแล้ว':        { gradient: 'from-red-400 to-rose-500',     text: 'text-red-700',   border: 'border-red-200',   ring: 'ring-red-300',   cellBg: 'bg-red-50',   cellText: 'text-red-700' },
   'ตั้งต้น':          { gradient: 'from-cyan-400 to-sky-500',     text: 'text-cyan-700',  border: 'border-cyan-200',  ring: 'ring-cyan-300',  cellBg: 'bg-cyan-50',  cellText: 'text-cyan-700' },
+  'เชื่อมต่อ':        { gradient: 'from-emerald-400 to-green-500', text: 'text-emerald-700', border: 'border-emerald-200', ring: 'ring-emerald-300', cellBg: 'bg-emerald-50', cellText: 'text-emerald-700' },
+  'ไม่ได้เชื่อม':      { gradient: 'from-gray-400 to-slate-500',   text: 'text-gray-600',   border: 'border-gray-200',   ring: 'ring-gray-300',   cellBg: 'bg-gray-100',  cellText: 'text-gray-600' },
+  'ไม่ได้เชื่อมต่อ':   { gradient: 'from-gray-400 to-slate-500',   text: 'text-gray-600',   border: 'border-gray-200',   ring: 'ring-gray-300',   cellBg: 'bg-gray-100',  cellText: 'text-gray-600' },
 };
 
 // สีสำรอง (สำหรับสถานะที่ไม่ได้กำหนดไว้ — สีเทา)
