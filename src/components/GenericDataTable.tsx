@@ -469,9 +469,15 @@ export default function GenericDataTable({ data, loading, columns, statusField, 
             </div>
           </div>
 
-          {/* แต่ละ group ต่อกันในแถวเดียว */}
-          {statusGroups.map(({ field, counts: groupCounts }) => groupCounts.length > 0 && (
-            <div key={field} className="flex-1 min-w-0">
+          {/* แต่ละ group ต่อกันในแถวเดียว — พื้นหลังแยกสี */}
+          {statusGroups.map(({ field, counts: groupCounts }, groupIdx) => groupCounts.length > 0 && (
+            <div key={field} className={`flex-1 min-w-0 rounded-xl p-2.5 ${
+              statusFields.length > 1
+                ? groupIdx % 2 === 0
+                  ? 'bg-slate-100/80 border border-slate-200/60'
+                  : 'bg-indigo-50/60 border border-indigo-100/60'
+                : ''
+            }`}>
               {statusFields.length > 1 && (
                 <p className="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{field}</p>
               )}
